@@ -1,0 +1,6 @@
+{
+  "name": "AIMS.H Hub",
+  "description": "Empowering Co-Founders. Testing Ideas. Executing Missions. A futuristic OS for agency co-founders to manage shared missions, branding, skills, media, and assets in real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

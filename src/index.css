@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+}
+
+/* Minimalist Clean Light Box & Card Styles */
+.app-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03), 0 2px 8px -2px rgba(15, 23, 42, 0.04);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-card:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 12px 28px -6px rgba(99, 102, 241, 0.09), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+.app-card-flat {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.02);
+}
+
+.app-input {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.app-input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
+}
+
+/* Light Cyber Subtle Pattern Background */
+.bg-light-pattern {
+  background-color: #f8fafc;
+  background-image: radial-gradient(rgba(203, 213, 225, 0.6) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Bottom & Floating Nav Glass Effect */
+.bottom-nav-bar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.12), 0 0 1px 1px rgba(255, 255, 255, 0.9) inset;
+}
+
+.desktop-nav-bar {
+  background: rgba(248, 250, 252, 0.85);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Light Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
