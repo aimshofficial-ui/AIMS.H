@@ -21,6 +21,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { MediaVideoItem, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 
 interface SmartMediaHubProps {
   appData: SharedAppData;
@@ -127,7 +129,7 @@ export const SmartMediaHub: React.FC<SmartMediaHubProps> = ({ appData, onUpdateD
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const partnerUser = foundersList.find((f) => f.id !== activeUser.id);
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
 
   const handleAddVideo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,7 +157,8 @@ export const SmartMediaHub: React.FC<SmartMediaHubProps> = ({ appData, onUpdateD
       ...appData,
       mediaVideos: [newVideo, ...appData.mediaVideos],
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setVideoTitle('');
@@ -167,7 +170,8 @@ export const SmartMediaHub: React.FC<SmartMediaHubProps> = ({ appData, onUpdateD
   const handleDeleteVideo = (videoId: string) => {
     const updatedList = appData.mediaVideos.filter((v) => v.id !== videoId);
     const updated = { ...appData, mediaVideos: updatedList };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
     if (activePlayerVideo?.id === videoId) {
       setActivePlayerVideo(null);
@@ -184,7 +188,8 @@ export const SmartMediaHub: React.FC<SmartMediaHubProps> = ({ appData, onUpdateD
       };
     });
     const updated = { ...appData, mediaVideos: updatedList };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setNewNoteText('');
@@ -647,6 +652,86 @@ export const SmartMediaHub: React.FC<SmartMediaHubProps> = ({ appData, onUpdateD
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* FULLSCREEN & SOUND VIDEO PLAYER MODAL */}
+      {activePlayerVideo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/90 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-4xl bg-slate-900 text-white rounded-3xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="p-4 bg-slate-950 flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-indigo-600 text-white">
+                  <Play className="w-4 h-4 fill-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white line-clamp-1">{activePlayerVideo.title}</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">Added by {activePlayerVideo.addedBy} • {activePlayerVideo.sector}</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActivePlayerVideo(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                title="Close Player"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Video Player Container */}
+            <div className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden">
+              {getYouTubeVideoId(activePlayerVideo.url) ? (
+                <iframe
+                  src={`https://www.youtube.com/embed/${getYouTubeVideoId(activePlayerVideo.url)}?autoplay=1&rel=0&enablejsapi=1`}
+                  title={activePlayerVideo.title}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : activePlayerVideo.url.endsWith('.mp4') || activePlayerVideo.url.startsWith('data:video') ? (
+                <video
+                  src={activePlayerVideo.url}
+                  controls
+                  autoPlay
+                  controlsList="nodownload"
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="p-6 text-center space-y-3">
+                  <p className="text-sm text-slate-300">This external link cannot be embedded directly in an iframe.</p>
+                  <a
+                    href={activePlayerVideo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black shadow-lg"
+                  >
+                    <span>Open External Video Player</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Notes Section Below Video */}
+            <div className="p-4 bg-slate-900 border-t border-slate-800 space-y-2 max-h-40 overflow-y-auto">
+              <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Actionable Key Takeaways:</h4>
+              <ul className="space-y-1">
+                {activePlayerVideo.actionableNotes.map((note, idx) => (
+                  <li key={idx} className="text-xs text-slate-300 flex items-start gap-2">
+                    <span className="text-indigo-400 font-bold">•</span>
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </motion.div>
         </div>
       )}

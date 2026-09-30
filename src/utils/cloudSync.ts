@@ -100,6 +100,7 @@ class CloudSyncManager {
             messages: mergeArraysById(currentLocal.messages || [], cloudData.messages || []),
             partnerRequests: mergeArraysById(currentLocal.partnerRequests || [], cloudData.partnerRequests || []),
             notifications: mergeArraysById(currentLocal.notifications || [], cloudData.notifications || []),
+            mediaVideos: mergeArraysById(currentLocal.mediaVideos || [], cloudData.mediaVideos || []),
           };
 
           const merged = cleanAppData(mergedRaw);
@@ -144,6 +145,7 @@ class CloudSyncManager {
               messages: mergeArraysById(currentLocal.messages || [], serverData.messages || []),
               partnerRequests: mergeArraysById(currentLocal.partnerRequests || [], serverData.partnerRequests || []),
               notifications: mergeArraysById(currentLocal.notifications || [], serverData.notifications || []),
+              mediaVideos: mergeArraysById(currentLocal.mediaVideos || [], serverData.mediaVideos || []),
             };
 
             const merged = cleanAppData(mergedRaw);

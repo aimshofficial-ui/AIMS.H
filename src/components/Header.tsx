@@ -92,7 +92,13 @@ export const Header: React.FC<HeaderProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Formatted current date string e.g. "Today, 30 Sep"
+  const getDynamicGreeting = () => {
+    const curHour = new Date().getHours();
+    if (curHour < 12) return 'Good Morning 🌅';
+    if (curHour < 17) return 'Good Afternoon ☀️';
+    if (curHour < 21) return 'Good Evening 🌆';
+    return 'Good Night 🌙';
+  };
   const formattedDate = new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
@@ -199,8 +205,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <div>
-            <span className="text-[11px] font-semibold text-slate-400 block leading-tight">
-              Welcome back,
+            <span className="text-[11px] font-semibold text-slate-500 block leading-tight">
+              {getDynamicGreeting()},
             </span>
             <h1 className="text-sm sm:text-base font-black text-slate-900 leading-tight flex items-center gap-1.5">
               <span>{activeUser.name}</span>
