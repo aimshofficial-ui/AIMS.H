@@ -1,6 +1,6 @@
-import { SharedAppData, UserProfile, PartnerRequest, AppNotification, PartnerConnection } from '../types';
+import { SharedAppData, UserProfile, PartnerRequest, AppNotification, PartnerConnection, ChatMessage } from '../types';
 import { saveAppData, loadAppData } from './storage';
-import { db, doc, onSnapshot, setDoc, collection, query, where, getDocs } from '../firebase';
+import { db, doc, onSnapshot, setDoc, collection, query, where, getDocs, deleteDoc } from '../firebase';
 import { cleanAppData, getPartnerForUser } from './partnerHelper';
 
 type SyncCallback = (data: SharedAppData) => void;
@@ -83,13 +83,10 @@ class CloudSyncManager {
             ...cloudData,
             activeFounderId: currentLocal.activeFounderId || cloudData.activeFounderId || '',
             founders: {
-              ...(currentLocal.founders || {}),
               ...(cloudData.founders || {}),
+              ...(currentLocal.founders || {}),
             },
-            partnerConnections: {
-              ...(cloudData.partnerConnections || {}),
-              ...(currentLocal.partnerConnections || {}),
-            },
+            partnerConnections: cloudData.partnerConnections || {},
             skills: mergeArraysById(currentLocal.skills || [], cloudData.skills || []),
             missions: mergeArraysById(currentLocal.missions || [], cloudData.missions || []),
             folders: mergeArraysById(currentLocal.folders || [], cloudData.folders || []),
@@ -98,7 +95,7 @@ class CloudSyncManager {
             meetings: mergeArraysById(currentLocal.meetings || [], cloudData.meetings || []),
             clients: mergeArraysById(currentLocal.clients || [], cloudData.clients || []),
             messages: mergeArraysById(currentLocal.messages || [], cloudData.messages || []),
-            partnerRequests: mergeArraysById(currentLocal.partnerRequests || [], cloudData.partnerRequests || []),
+            partnerRequests: cloudData.partnerRequests || [],
             notifications: mergeArraysById(currentLocal.notifications || [], cloudData.notifications || []),
             mediaVideos: mergeArraysById(currentLocal.mediaVideos || [], cloudData.mediaVideos || []),
           };
@@ -110,8 +107,112 @@ class CloudSyncManager {
       }, (err) => {
         console.warn('Firestore onSnapshot listener fallback', err);
       });
+
+      // 1. Decoupled real-time listener for users collection
+      onSnapshot(collection(db, 'users'), (snap) => {
+        const cloudFounders: Record<string, UserProfile> = {};
+        snap.forEach((docSnap) => {
+          if (docSnap.exists()) {
+            cloudFounders[docSnap.id] = docSnap.data() as UserProfile;
+          }
+        });
+        const current = loadAppData();
+        const updated = {
+          ...current,
+          founders: {
+            ...(current.founders || {}),
+            ...cloudFounders,
+          },
+        };
+        saveAppData(updated, false);
+        this.notify(updated);
+      }, (err) => {
+        console.warn('users snapshot error', err);
+      });
+
+      // 2. Decoupled real-time listener for partner_requests collection
+      onSnapshot(collection(db, 'partner_requests'), (snap) => {
+        const reqs: PartnerRequest[] = [];
+        snap.forEach((docSnap) => {
+          if (docSnap.exists()) {
+            reqs.push(docSnap.data() as PartnerRequest);
+          }
+        });
+        const current = loadAppData();
+        const updated = {
+          ...current,
+          partnerRequests: reqs,
+        };
+        saveAppData(updated, false);
+        this.notify(updated);
+      }, (err) => {
+        console.warn('requests snapshot error', err);
+      });
+
+      // 3. Decoupled real-time listener for partner_connections collection
+      onSnapshot(collection(db, 'partner_connections'), (snap) => {
+        const conns: Record<string, PartnerConnection> = {};
+        snap.forEach((docSnap) => {
+          if (docSnap.exists()) {
+            conns[docSnap.id] = docSnap.data() as PartnerConnection;
+          }
+        });
+        const current = loadAppData();
+        const updated = {
+          ...current,
+          partnerConnections: conns,
+        };
+        saveAppData(updated, false);
+        this.notify(updated);
+      }, (err) => {
+        console.warn('connections snapshot error', err);
+      });
+
+      // 4. Decoupled real-time listener for messages collection
+      onSnapshot(collection(db, 'messages'), (snap) => {
+        const msgs: ChatMessage[] = [];
+        snap.forEach((docSnap) => {
+          if (docSnap.exists()) {
+            msgs.push(docSnap.data() as ChatMessage);
+          }
+        });
+        // Sort messages chronologically by timestamp-embedded ID
+        const sortedMsgs = msgs.sort((a, b) => {
+          const tA = a.id.split('-')[1] || '';
+          const tB = b.id.split('-')[1] || '';
+          return tA.localeCompare(tB);
+        });
+        const current = loadAppData();
+        const updated = {
+          ...current,
+          messages: sortedMsgs,
+        };
+        saveAppData(updated, false);
+        this.notify(updated);
+      }, (err) => {
+        console.warn('messages snapshot error', err);
+      });
+
     } catch (e) {
       console.error('Firestore init error', e);
+    }
+  }
+
+  // Send a private chat message directly to the Firestore messages collection
+  public async sendChatMessage(msg: ChatMessage): Promise<void> {
+    try {
+      await setDoc(doc(db, 'messages', msg.id), sanitizeForFirestore(msg));
+    } catch (e) {
+      console.error('Failed to send chat message to Firestore', e);
+    }
+  }
+
+  // Delete a private chat message directly from the Firestore messages collection
+  public async deleteChatMessage(msgId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'messages', msgId));
+    } catch (e) {
+      console.error('Failed to delete chat message from Firestore', e);
     }
   }
 
@@ -135,6 +236,7 @@ class CloudSyncManager {
             const mergedRaw: SharedAppData = {
               ...serverData,
               activeFounderId: currentLocal.activeFounderId || serverData.activeFounderId || '',
+              partnerConnections: serverData.partnerConnections || {},
               skills: mergeArraysById(currentLocal.skills || [], serverData.skills || []),
               missions: mergeArraysById(currentLocal.missions || [], serverData.missions || []),
               folders: mergeArraysById(currentLocal.folders || [], serverData.folders || []),
@@ -143,7 +245,7 @@ class CloudSyncManager {
               meetings: mergeArraysById(currentLocal.meetings || [], serverData.meetings || []),
               clients: mergeArraysById(currentLocal.clients || [], serverData.clients || []),
               messages: mergeArraysById(currentLocal.messages || [], serverData.messages || []),
-              partnerRequests: mergeArraysById(currentLocal.partnerRequests || [], serverData.partnerRequests || []),
+              partnerRequests: serverData.partnerRequests || [],
               notifications: mergeArraysById(currentLocal.notifications || [], serverData.notifications || []),
               mediaVideos: mergeArraysById(currentLocal.mediaVideos || [], serverData.mediaVideos || []),
             };
@@ -462,7 +564,10 @@ class CloudSyncManager {
 
       await this.syncState(updatedData);
 
-      // Save notification to Firestore
+      // Save request update, connection mappings, and notification directly in Firestore collections
+      await setDoc(doc(db, 'partner_requests', requestId), { status: 'accepted' }, { merge: true }).catch(() => {});
+      await setDoc(doc(db, 'partner_connections', `${activeUserId}_${partnerUser.id}`), sanitizeForFirestore(connActive)).catch(() => {});
+      await setDoc(doc(db, 'partner_connections', `${partnerUser.id}_${activeUserId}`), sanitizeForFirestore(connPartner)).catch(() => {});
       await setDoc(doc(db, 'notifications', newNotif.id), sanitizeForFirestore(newNotif));
 
       // Call Express server
@@ -534,6 +639,26 @@ class CloudSyncManager {
 
       await this.syncState(updatedData);
 
+      // Decoupled direct Firestore collection deletions
+      await deleteDoc(doc(db, 'partner_connections', `${currentUserId}_${partnerId}`)).catch(() => {});
+      await deleteDoc(doc(db, 'partner_connections', `${partnerId}_${currentUserId}`)).catch(() => {});
+      await deleteDoc(doc(db, 'partner_connections', currentUserId)).catch(() => {});
+      await deleteDoc(doc(db, 'partner_connections', partnerId)).catch(() => {});
+
+      // Delete corresponding pending request documents if any exist
+      try {
+        const qRequestSearch = query(
+          collection(db, 'partner_requests'),
+          where('fromUserId', '==', currentUserId)
+        );
+        const requestSnaps = await getDocs(qRequestSearch);
+        requestSnaps.forEach((docSnap) => {
+          deleteDoc(doc(db, 'partner_requests', docSnap.id)).catch(() => {});
+        });
+      } catch (err) {
+        // ignore
+      }
+
       fetch('/api/partner/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -554,7 +679,7 @@ class CloudSyncManager {
       saveAppData(cleaned, false);
       const cleanData = sanitizeForFirestore(cleaned);
       const docRef = doc(db, 'workspace', 'shared_state');
-      await setDoc(docRef, cleanData, { merge: true });
+      await setDoc(docRef, cleanData);
 
       fetch('/api/data', {
         method: 'POST',

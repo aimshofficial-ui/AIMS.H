@@ -98,7 +98,7 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
       senderId: activeUser.id,
       senderName: activeUser.name,
       senderAvatar: activeUser.avatar,
-      recipientId: recipientFilter,
+      recipientId: selectedPartnerId || 'all',
       content: textToSend,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       reactions: {},
@@ -123,6 +123,7 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
 
     saveAppData(updated, true);
     await cloudSync.syncState(updated);
+    await cloudSync.sendChatMessage(newMsg);
   };
 
   // Keyboard shortcut: Enter to send, Shift+Enter for newline
@@ -138,6 +139,7 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
     const updated = { ...appData, messages: (appData.messages || []).filter((m) => m.id !== msgId) };
     saveAppData(updated, true);
     await cloudSync.syncState(updated);
+    await cloudSync.deleteChatMessage(msgId);
     setToastNotice('🗑️ Message deleted');
     setTimeout(() => setToastNotice(''), 2500);
   };
