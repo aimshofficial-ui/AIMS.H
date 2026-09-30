@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
 import { cloudSync } from '../../utils/cloudSync';
-import { getPartnerForUser } from '../../utils/partnerHelper';
+import { getPartnerForUser, getAllPartnersForUser } from '../../utils/partnerHelper';
 import { pushAppNotification } from '../../utils/notifications';
 
 interface PartnerChatProps {
@@ -48,7 +48,18 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const partnerUser = getPartnerForUser(appData, activeUser.id);
+  const connectedPartners = getAllPartnersForUser(appData, activeUser.id);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>(
+    connectedPartners[0]?.id || ''
+  );
+
+  useEffect(() => {
+    if (connectedPartners.length > 0 && (!selectedPartnerId || !connectedPartners.some(p => p.id === selectedPartnerId))) {
+      setSelectedPartnerId(connectedPartners[0].id);
+    }
+  }, [connectedPartners]);
+
+  const partnerUser = connectedPartners.find((p) => p.id === selectedPartnerId) || connectedPartners[0] || null;
   const isPartnerConnected = !!partnerUser;
 
   const partnerStatus = partnerUser ? (appData.partnerStatuses[partnerUser.id] || {
@@ -59,12 +70,22 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
     lastSeen: 'Not connected',
   };
 
+  // Filter messages specifically for the selected active partner conversation
+  const filteredMessages = (appData.messages || []).filter((msg) => {
+    if (!partnerUser) return true;
+    return (
+      (msg.senderId === activeUser.id && msg.recipientId === partnerUser.id) ||
+      (msg.senderId === partnerUser.id && msg.recipientId === activeUser.id) ||
+      (msg.recipientId === 'all')
+    );
+  });
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (!isSelectionMode) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [appData.messages, isSelectionMode]);
+  }, [filteredMessages, isSelectionMode]);
 
   // Send pure text message with real-time push notification & vibration
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -228,9 +249,21 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
 
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-black text-slate-900 leading-tight">
-                  {partnerUser ? partnerUser.name : 'Waiting for Partner to Connect'}
-                </h3>
+                {connectedPartners.length > 1 ? (
+                  <select
+                    value={selectedPartnerId}
+                    onChange={(e) => setSelectedPartnerId(e.target.value)}
+                    className="text-xs px-2 py-1 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold outline-none cursor-pointer"
+                  >
+                    {connectedPartners.map((p) => (
+                      <option key={p.id} value={p.id}>💬 {p.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <h3 className="text-sm font-black text-slate-900 leading-tight">
+                    {partnerUser ? partnerUser.name : 'Waiting for Partner to Connect'}
+                  </h3>
+                )}
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
                   partnerStatus.isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
                 }`}>
@@ -328,7 +361,7 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
 
         {/* Messages Stream */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9fe]">
-          {appData.messages.length === 0 ? (
+          {filteredMessages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-xs">
                 <MessageSquare className="w-6 h-6 stroke-2" />
@@ -361,7 +394,7 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
               </div>
             </div>
           ) : (
-            appData.messages.map((msg) => {
+            filteredMessages.map((msg) => {
               const isMe = msg.senderId === activeUser.id;
               const isSelected = selectedIds.includes(msg.id);
               const sender = appData.founders[msg.senderId] || {

@@ -32,7 +32,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AgencyMeeting, SharedAppData, ChatMessage } from '../../types';
 import { saveAppData } from '../../utils/storage';
 import { cloudSync } from '../../utils/cloudSync';
-import { getPartnerForUser } from '../../utils/partnerHelper';
+import { getPartnerForUser, getAllPartnersForUser } from '../../utils/partnerHelper';
 import { triggerMobileAlert, pushAppNotification } from '../../utils/notifications';
 
 interface MeetingHubProps {
@@ -125,6 +125,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
+  const connectedPartners = getAllPartnersForUser(appData, activeUser.id);
   const partnerUser = getPartnerForUser(appData, activeUser.id);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>(partnerUser?.id || 'all');
   const meetings: AgencyMeeting[] = appData.meetings || [];
@@ -995,14 +996,12 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
                   onChange={(e) => setSelectedPartnerId(e.target.value)}
                   className="w-full app-input px-3 py-2 text-xs font-semibold"
                 >
-                  {foundersList
-                    .filter((f) => f.id !== activeUser.id)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.role}) - {p.inviteCode}
-                      </option>
-                    ))}
-                  {foundersList.filter((f) => f.id !== activeUser.id).length === 0 && (
+                  {connectedPartners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.role}) - {p.inviteCode}
+                    </option>
+                  ))}
+                  {connectedPartners.length === 0 && (
                     <option value="all">All Connected Workspace Partners</option>
                   )}
                 </select>

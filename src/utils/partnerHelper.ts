@@ -20,14 +20,14 @@ export function cleanAppData(appData: SharedAppData): SharedAppData {
 
   const cleanedPartnerConnections: Record<string, PartnerConnection> = {};
   if (appData.partnerConnections) {
-    Object.entries(appData.partnerConnections).forEach(([userId, conn]) => {
+    Object.entries(appData.partnerConnections).forEach(([key, conn]) => {
       if (
         conn &&
         conn.pairedUserId &&
         !conn.pairedUserId.startsWith('partner_') &&
         cleanedFounders[conn.pairedUserId]
       ) {
-        cleanedPartnerConnections[userId] = conn;
+        cleanedPartnerConnections[key] = conn;
       }
     });
   }
@@ -54,31 +54,34 @@ export function cleanAppData(appData: SharedAppData): SharedAppData {
 }
 
 /**
- * Get the real connected partner profile for a given user ID
+ * Get all real connected partner profiles for a given user ID (supports 10-12 partners)
  */
-export function getPartnerForUser(appData: SharedAppData, userId: string): UserProfile | null {
-  if (!appData || !userId) return null;
+export function getAllPartnersForUser(appData: SharedAppData, userId: string): UserProfile[] {
+  if (!appData || !userId) return [];
 
   const cleaned = cleanAppData(appData);
+  const partnersMap = new Map<string, UserProfile>();
 
-  // 1. Check partnerConnections map for this user
-  const userConn = cleaned.partnerConnections?.[userId];
-  if (userConn && userConn.status === 'accepted' && userConn.pairedUserId) {
-    const partner = cleaned.founders[userConn.pairedUserId];
-    if (partner) return partner;
-  }
-
-  // 2. Check if any other user's partnerConnections maps to this user
+  // 1. Scan partnerConnections mapping keys (userA_userB or userB_userA)
   if (cleaned.partnerConnections) {
-    for (const [otherId, conn] of Object.entries(cleaned.partnerConnections)) {
-      if (otherId !== userId && conn.status === 'accepted' && conn.pairedUserId === userId) {
-        const partner = cleaned.founders[otherId];
-        if (partner) return partner;
+    Object.entries(cleaned.partnerConnections).forEach(([key, conn]) => {
+      if (conn && conn.status === 'accepted' && conn.pairedUserId) {
+        const isMatched = key.startsWith(`${userId}_`) || 
+                          key.endsWith(`_${userId}`) || 
+                          key === userId || 
+                          conn.pairedUserId !== userId;
+
+        if (isMatched) {
+          const partner = cleaned.founders[conn.pairedUserId];
+          if (partner && partner.id !== userId) {
+            partnersMap.set(partner.id, partner);
+          }
+        }
       }
-    }
+    });
   }
 
-  // 3. Fallback to legacy partnerConnection if pairedUserId != userId
+  // 2. Legacy partnerConnection mapping (backward compatibility)
   if (
     cleaned.partnerConnection &&
     cleaned.partnerConnection.status === 'accepted' &&
@@ -86,15 +89,25 @@ export function getPartnerForUser(appData: SharedAppData, userId: string): UserP
     cleaned.partnerConnection.pairedUserId !== userId
   ) {
     const partner = cleaned.founders[cleaned.partnerConnection.pairedUserId];
-    if (partner) return partner;
+    if (partner) {
+      partnersMap.set(partner.id, partner);
+    }
   }
 
-  return null;
+  return Array.from(partnersMap.values());
 }
 
 /**
- * Check if activeUser is paired with partner
+ * Get the first real connected partner profile for a given user ID
+ */
+export function getPartnerForUser(appData: SharedAppData, userId: string): UserProfile | null {
+  const list = getAllPartnersForUser(appData, userId);
+  return list.length > 0 ? list[0] : null;
+}
+
+/**
+ * Check if activeUser is paired with at least one partner
  */
 export function isPartnerConnectedForUser(appData: SharedAppData, userId: string): boolean {
-  return !!getPartnerForUser(appData, userId);
+  return getAllPartnersForUser(appData, userId).length > 0;
 }

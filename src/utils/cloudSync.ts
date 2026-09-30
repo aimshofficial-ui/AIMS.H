@@ -426,6 +426,8 @@ class CloudSyncManager {
 
       const nextPartnerConnections = {
         ...(currentData.partnerConnections || {}),
+        [`${activeUserId}_${partnerUser.id}`]: connActive,
+        [`${partnerUser.id}_${activeUserId}`]: connPartner,
         [activeUser.id]: connActive,
         [partnerUser.id]: connPartner,
       };
@@ -478,15 +480,23 @@ class CloudSyncManager {
   }
 
   // Disconnect partner on BOTH sides
-  public async disconnectPartner(activeUserId?: string): Promise<boolean> {
+  public async disconnectPartner(activeUserId: string, targetPartnerId?: string): Promise<boolean> {
     try {
       const currentData = cleanAppData(loadAppData());
       const currentUserId = activeUserId || currentData.activeFounderId;
-      const partner = getPartnerForUser(currentData, currentUserId);
+      const partnerId = targetPartnerId || getPartnerForUser(currentData, currentUserId)?.id;
+
+      if (!partnerId) {
+        return false;
+      }
 
       const nextConnections = { ...(currentData.partnerConnections || {}) };
-      if (currentUserId) delete nextConnections[currentUserId];
-      if (partner) delete nextConnections[partner.id];
+      
+      // Delete specific bidirectional composite mappings
+      delete nextConnections[`${currentUserId}_${partnerId}`];
+      delete nextConnections[`${partnerId}_${currentUserId}`];
+      delete nextConnections[currentUserId];
+      delete nextConnections[partnerId];
 
       const emptyConn: PartnerConnection = {
         partnerInviteCode: '',
@@ -495,17 +505,17 @@ class CloudSyncManager {
       };
 
       let nextNotifs = currentData.notifications || [];
-      if (partner && currentUserId && currentData.founders[currentUserId]) {
+      if (currentUserId && currentData.founders[currentUserId]) {
         const sender = currentData.founders[currentUserId];
         const notif: AppNotification = {
           id: `disnotif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           type: 'partner',
           title: '🔌 Workspace Disconnected',
-          message: `${sender.name} disconnected the co-founder workspace connection.`,
+          message: `${sender.name} disconnected the workspace connection with ${currentData.founders[partnerId]?.name || 'Partner'}.`,
           senderId: currentUserId,
           senderName: sender.name,
           senderAvatar: sender.avatar,
-          targetUserId: partner.id,
+          targetUserId: partnerId,
           actionTab: 'partners',
           timestamp: 'Just now',
           isoTime: new Date().toISOString(),
@@ -520,10 +530,6 @@ class CloudSyncManager {
         partnerConnection: emptyConn,
         partnerConnections: nextConnections,
         notifications: nextNotifs,
-        partnerRequests: (currentData.partnerRequests || []).map((r) => ({
-          ...r,
-          status: r.status === 'accepted' ? ('declined' as const) : r.status,
-        })),
       };
 
       await this.syncState(updatedData);
@@ -531,6 +537,7 @@ class CloudSyncManager {
       fetch('/api/partner/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activeUserId: currentUserId, partnerId }),
       }).catch(() => {});
 
       return true;
