@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { SharedAppData, PartnerRequest, UserProfile, PartnerConnection } from '../../types';
 import { saveAppData } from '../../utils/storage';
 import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser, cleanAppData } from '../../utils/partnerHelper';
 import { pushAppNotification, triggerMobileAlert } from '../../utils/notifications';
 
 interface PartnersHubTabProps {
@@ -119,11 +120,9 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
     sessionMinutes: 28,
   };
 
-  // Find partner strictly when connection accepted
-  const isConnected = appData.partnerConnection.status === 'accepted' && 
-    !!appData.partnerConnection.pairedUserId && 
-    !!appData.founders[appData.partnerConnection.pairedUserId];
-  const pairedPartner = isConnected ? appData.founders[appData.partnerConnection.pairedUserId] : null;
+  // Find partner strictly using partnerHelper
+  const pairedPartner = getPartnerForUser(appData, activeUser.id);
+  const isConnected = !!pairedPartner;
 
   // Incoming pending requests directed to this user's invite code
   const incomingRequests = appData.partnerRequests.filter(
@@ -459,7 +458,7 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
         <div className="flex items-center justify-between px-1">
           <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Co-Founder Workspace Seats ({foundersList.length})</span>
+            <span>Co-Founder Workspace Seats ({isConnected ? 2 : 1})</span>
           </h4>
           <span className="text-[11px] text-slate-500 font-medium">
             Real-Time Bilateral Sync Active
@@ -467,98 +466,114 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {foundersList.map((partner, idx) => {
-            const isMe = partner.id === activeUser.id;
-            const status = appData.partnerStatuses[partner.id] || {
-              userId: partner.id,
-              isOnline: true,
-              currentTask: isMe ? myStatus.currentTask : 'Reviewing client deliverables & video edits',
-              availability: isMe ? myStatus.availability : 'Available for Execution',
-              lastSeen: 'Active now',
-              sessionMinutes: 28,
-            };
+          {/* YOU (ACTIVE USER) */}
+          <div className="p-4 sm:p-5 rounded-3xl card-pastel-blue relative overflow-hidden shadow-sm space-y-3">
+            <div className="absolute right-2 top-2 pointer-events-none">
+              <Torus3DArt color="blue" size="w-16 h-16" />
+            </div>
 
-            const colorVariant = idx % 2 === 0 ? 'orange' : 'pink';
-            const cardClass = colorVariant === 'orange' ? 'card-pastel-orange' : 'card-pastel-pink';
-
-            return (
-              <div
-                key={partner.id}
-                className={`p-4 sm:p-5 rounded-3xl ${cardClass} relative overflow-hidden shadow-sm space-y-3`}
-              >
-                <div className="absolute right-2 top-2 pointer-events-none">
-                  <Torus3DArt color={colorVariant} size="w-16 h-16" />
+            <div className="relative z-10 flex items-start justify-between gap-3 max-w-[85%]">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <img
+                    src={activeUser.avatar}
+                    alt={activeUser.name}
+                    className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-xs"
+                  />
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                 </div>
 
-                <div className="relative z-10 flex items-start justify-between gap-3 max-w-[85%]">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={partner.avatar}
-                        alt={partner.name}
-                        className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-xs"
-                      />
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="text-sm font-black text-slate-900">{partner.name}</h4>
-                        {isMe && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-white text-slate-800 font-black">
-                            YOU
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-600 font-medium">{partner.role}</p>
-                    </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-sm font-black text-slate-900">{activeUser.name}</h4>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-white text-slate-800 font-black">
+                      YOU
+                    </span>
                   </div>
-
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Active Now
-                  </span>
-                </div>
-
-                {/* Focus */}
-                <div className="relative z-10 p-2.5 rounded-2xl bg-white/80 border border-slate-200/80 space-y-1 text-xs">
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
-                    <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Current Focus:</span>
-                  </div>
-                  <p className="text-slate-700 text-[11px] font-medium leading-relaxed">
-                    {status.currentTask}
-                  </p>
-                </div>
-
-                {/* Footer Actions */}
-                <div className="relative z-10 pt-1 flex items-center justify-between text-xs">
-                  <span className="text-[11px] font-bold text-slate-700 bg-white/80 px-2.5 py-1 rounded-xl border border-slate-200">
-                    {status.availability}
-                  </span>
-
-                  {!isMe && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={onNavigateToChat}
-                        className="px-3 py-1 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
-                      >
-                        <MessageSquare className="w-3 h-3" />
-                        <span>Chat</span>
-                      </button>
-                      <button
-                        onClick={handleDisconnectPartner}
-                        className="p-1 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                        title="Disconnect Partner"
-                      >
-                        <UserMinus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
+                  <p className="text-[11px] text-slate-600 font-medium">{activeUser.role} • Code: {activeUser.inviteCode}</p>
                 </div>
               </div>
-            );
-          })}
+
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Active Now
+              </span>
+            </div>
+
+            <div className="relative z-10 p-2.5 rounded-2xl bg-white/80 border border-slate-200/80 space-y-1 text-xs">
+              <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
+                <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Current Focus:</span>
+              </div>
+              <p className="text-slate-700 text-[11px] font-medium leading-relaxed">
+                {myStatus.currentTask}
+              </p>
+            </div>
+          </div>
+
+          {/* REAL CONNECTED PARTNER OR CONNECT PROMPT */}
+          {pairedPartner ? (
+            <div className="p-4 sm:p-5 rounded-3xl card-pastel-pink relative overflow-hidden shadow-sm space-y-3">
+              <div className="absolute right-2 top-2 pointer-events-none">
+                <Torus3DArt color="pink" size="w-16 h-16" />
+              </div>
+
+              <div className="relative z-10 flex items-start justify-between gap-3 max-w-[85%]">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <img
+                      src={pairedPartner.avatar}
+                      alt={pairedPartner.name}
+                      className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-xs"
+                    />
+                    <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900">{pairedPartner.name}</h4>
+                    <p className="text-[11px] text-slate-600 font-medium">{pairedPartner.role} • Code: {pairedPartner.inviteCode}</p>
+                  </div>
+                </div>
+
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Connected
+                </span>
+              </div>
+
+              <div className="relative z-10 p-2.5 rounded-2xl bg-white/80 border border-slate-200/80 space-y-1 text-xs">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
+                  <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Partner Focus:</span>
+                </div>
+                <p className="text-slate-700 text-[11px] font-medium leading-relaxed">
+                  {(appData.partnerStatuses[pairedPartner.id] || {}).currentTask || 'Active in shared agency workspace'}
+                </p>
+              </div>
+
+              {/* Action Buttons for Connected Partner */}
+              <div className="relative z-10 pt-1 flex items-center flex-wrap justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={handleDisconnectPartner}
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs border border-rose-200 flex items-center gap-1 cursor-pointer transition"
+                >
+                  <UserMinus className="w-3.5 h-3.5" />
+                  <span>Disconnect</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 sm:p-5 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center space-y-2 text-slate-500">
+              <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <h5 className="text-xs font-bold text-slate-800">No Partner Connected Yet</h5>
+              <p className="text-[11px] text-slate-400 max-w-[220px]">
+                Enter your partner's invite code below or share your code <strong className="font-mono text-slate-700">{activeUser.inviteCode}</strong> to pair in real-time.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

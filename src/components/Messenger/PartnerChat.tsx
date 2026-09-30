@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
 import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 import { pushAppNotification } from '../../utils/notifications';
 
 interface PartnerChatProps {
@@ -47,13 +48,8 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const isPartnerConnected = appData.partnerConnection.status === 'accepted' && 
-    !!appData.partnerConnection.pairedUserId && 
-    !!appData.founders[appData.partnerConnection.pairedUserId];
-
-  const partnerUser = isPartnerConnected
-    ? appData.founders[appData.partnerConnection.pairedUserId]
-    : null;
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
+  const isPartnerConnected = !!partnerUser;
 
   const partnerStatus = partnerUser ? (appData.partnerStatuses[partnerUser.id] || {
     isOnline: true,
@@ -88,7 +84,22 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
     };
 
     setInputText('');
-    const updated = { ...appData, messages: [...(appData.messages || []), newMsg] };
+    let updated = { ...appData, messages: [...(appData.messages || []), newMsg] };
+
+    if (partnerUser) {
+      updated = pushAppNotification(updated, {
+        type: 'message',
+        title: `💬 New Message from ${activeUser.name}`,
+        message: textToSend,
+        senderId: activeUser.id,
+        senderName: activeUser.name,
+        senderAvatar: activeUser.avatar,
+        targetUserId: partnerUser.id,
+        actionTab: 'chat',
+        timestamp: 'Just now',
+      });
+    }
+
     saveAppData(updated, true);
     await cloudSync.syncState(updated);
   };

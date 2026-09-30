@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { SkillItem, MasteryStage, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 
 interface SkillMatrixProps {
   appData: SharedAppData;
@@ -124,9 +126,9 @@ export const SkillMatrix: React.FC<SkillMatrixProps> = ({ appData, onUpdateData 
     inviteCode: 'AIMSH-001'
   };
 
-  // Identify partner
-  const partnerUser = foundersList.find((f) => f.id !== activeUser.id);
-  const isPartnerConnected = appData.partnerConnection.status === 'accepted' || !!partnerUser;
+  // Identify partner strictly
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
+  const isPartnerConnected = !!partnerUser;
 
   // Real-time update progress for a skill
   const handleUpdateProgress = (skillId: string, newPercent: number) => {
@@ -136,7 +138,8 @@ export const SkillMatrix: React.FC<SkillMatrixProps> = ({ appData, onUpdateData 
       s.id === skillId ? { ...s, progressPercent: clamped, stage } : s
     );
     const updated = { ...appData, skills: updatedSkills };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -154,7 +157,8 @@ export const SkillMatrix: React.FC<SkillMatrixProps> = ({ appData, onUpdateData 
       };
     });
     const updated = { ...appData, skills: updatedSkills };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -164,7 +168,8 @@ export const SkillMatrix: React.FC<SkillMatrixProps> = ({ appData, onUpdateData 
       s.id === skillId ? { ...s, kudosCount: (s.kudosCount || 0) + 1 } : s
     );
     const updated = { ...appData, skills: updatedSkills };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setCheerParticleId(skillId);
@@ -175,7 +180,8 @@ export const SkillMatrix: React.FC<SkillMatrixProps> = ({ appData, onUpdateData 
   const handleDeleteSkill = (skillId: string) => {
     const updatedSkills = appData.skills.filter((s) => s.id !== skillId);
     const updated = { ...appData, skills: updatedSkills };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export type BottomTabId = 'missions' | 'analytics' | 'partners' | 'skills' | 'drive' | 'media' | 'habits' | 'search' | 'profile' | 'meetings' | 'clients';
+export type BottomTabId = 'missions' | 'analytics' | 'partners' | 'skills' | 'drive' | 'media' | 'habits' | 'search' | 'chat' | 'profile' | 'meetings' | 'clients';
 
 export interface TabConfig {
   id: BottomTabId;
@@ -71,6 +71,12 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       id: 'habits',
       label: 'Habits',
       icon: Flame,
+    },
+    {
+      id: 'chat',
+      label: 'Chat',
+      icon: MessageSquare,
+      badge: messageCount > 0 ? messageCount : null,
     },
     {
       id: 'search',

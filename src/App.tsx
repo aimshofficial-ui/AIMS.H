@@ -187,7 +187,11 @@ export default function App() {
               <HabitHeatmap appData={appData} onUpdateData={setAppData} />
             )}
 
-            {(activeTab === 'search' || (activeTab as string) === 'chat') && (
+            {activeTab === 'chat' && (
+              <PartnerChat appData={appData} onUpdateData={setAppData} />
+            )}
+
+            {activeTab === 'search' && (
               <GlobalSearchIntelligenceHub
                 appData={appData}
                 onUpdateData={setAppData}
@@ -203,7 +207,7 @@ export default function App() {
               <PartnersHubTab
                 appData={appData}
                 onUpdateData={setAppData}
-                onNavigateToChat={() => setActiveTab('search')}
+                onNavigateToChat={() => setActiveTab('chat')}
               />
             )}
 

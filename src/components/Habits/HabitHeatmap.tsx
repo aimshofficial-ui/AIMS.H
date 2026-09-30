@@ -16,6 +16,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { HabitItem, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 
 interface HabitHeatmapProps {
   appData: SharedAppData;
@@ -101,7 +103,7 @@ export const HabitHeatmap: React.FC<HabitHeatmapProps> = ({ appData, onUpdateDat
   const todayStr = days14[days14.length - 1].dateStr;
   const foundersList = Object.values(appData.founders);
   const activeUser = appData.founders[appData.activeFounderId] || foundersList[0];
-  const partnerUser = foundersList.find((f) => f.id !== activeUser.id);
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
 
   const handleToggleDay = (habitId: string, dateStr: string) => {
     const updatedHabits = appData.habits.map((h) => {
@@ -128,7 +130,8 @@ export const HabitHeatmap: React.FC<HabitHeatmapProps> = ({ appData, onUpdateDat
     });
 
     const updated = { ...appData, habits: updatedHabits };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -137,7 +140,8 @@ export const HabitHeatmap: React.FC<HabitHeatmapProps> = ({ appData, onUpdateDat
       ...appData,
       habits: appData.habits.filter((h) => h.id !== habitId),
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -159,7 +163,8 @@ export const HabitHeatmap: React.FC<HabitHeatmapProps> = ({ appData, onUpdateDat
       ...appData,
       habits: [newHabit, ...appData.habits],
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setHabitTitle('');

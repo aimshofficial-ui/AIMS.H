@@ -1,6 +1,7 @@
-import { SharedAppData, UserProfile, PartnerRequest, AppNotification } from '../types';
+import { SharedAppData, UserProfile, PartnerRequest, AppNotification, PartnerConnection } from '../types';
 import { saveAppData, loadAppData } from './storage';
-import { db, doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, updateDoc, addDoc } from '../firebase';
+import { db, doc, onSnapshot, setDoc, collection, query, where, getDocs } from '../firebase';
+import { cleanAppData, getPartnerForUser } from './partnerHelper';
 
 type SyncCallback = (data: SharedAppData) => void;
 
@@ -29,9 +30,10 @@ class CloudSyncManager {
   }
 
   private notify(data: SharedAppData) {
+    const cleaned = cleanAppData(data);
     this.listeners.forEach((listener) => {
       try {
-        listener(data);
+        listener(cleaned);
       } catch (err) {
         console.error('Error in sync listener', err);
       }
@@ -47,15 +49,20 @@ class CloudSyncManager {
           const cloudData = docSnap.data() as SharedAppData;
           const currentLocal = loadAppData();
 
-          const merged: SharedAppData = {
+          const mergedRaw: SharedAppData = {
             ...cloudData,
             activeFounderId: currentLocal.activeFounderId || cloudData.activeFounderId || '',
             founders: {
               ...(currentLocal.founders || {}),
               ...(cloudData.founders || {}),
             },
+            partnerConnections: {
+              ...(cloudData.partnerConnections || {}),
+              ...(currentLocal.partnerConnections || {}),
+            },
           };
 
+          const merged = cleanAppData(mergedRaw);
           saveAppData(merged, false);
           this.notify(merged);
         }
@@ -84,11 +91,12 @@ class CloudSyncManager {
             const serverData: SharedAppData = payload.data;
             const currentLocal = loadAppData();
 
-            const merged: SharedAppData = {
+            const mergedRaw: SharedAppData = {
               ...serverData,
               activeFounderId: currentLocal.activeFounderId || serverData.activeFounderId || '',
             };
 
+            const merged = cleanAppData(mergedRaw);
             saveAppData(merged, false);
             this.notify(merged);
           }
@@ -112,10 +120,13 @@ class CloudSyncManager {
   // Register real user to Firestore & server
   public async registerUser(profile: UserProfile): Promise<void> {
     try {
-      // Save to Firebase Firestore
-      await setDoc(doc(db, 'users', profile.id), profile, { merge: true });
+      const cleanProf = { ...profile };
+      delete cleanProf.password;
 
-      const current = loadAppData();
+      // Save to Firebase Firestore
+      await setDoc(doc(db, 'users', profile.id), sanitizeForFirestore(cleanProf), { merge: true });
+
+      const current = cleanAppData(loadAppData());
       const nextFounders = {
         ...current.founders,
         [profile.id]: profile,
@@ -140,11 +151,11 @@ class CloudSyncManager {
       await this.syncState(updated);
 
       // Register with Express server
-      await fetch('/api/register-profile', {
+      fetch('/api/register-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile }),
-      });
+      }).catch(() => {});
     } catch (e) {
       console.error('Register profile failed', e);
     }
@@ -160,7 +171,7 @@ class CloudSyncManager {
   }> {
     try {
       const normalizedCode = targetInviteCode.trim().toUpperCase();
-      const currentData = loadAppData();
+      const currentData = cleanAppData(loadAppData());
       const sender = currentData.founders[fromUserId];
 
       if (!sender) {
@@ -180,7 +191,7 @@ class CloudSyncManager {
           targetPartner = snap.docs[0].data() as UserProfile;
         }
       } catch (err) {
-        // fallback to currentData
+        // fallback
       }
 
       if (!targetPartner) {
@@ -203,7 +214,7 @@ class CloudSyncManager {
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         type: 'partner',
         title: `🤝 New Partner Request from ${sender.name}`,
-        message: `${sender.name} (${sender.role}) wants to connect co-founder workspaces with code ${sender.inviteCode}.`,
+        message: `${sender.name} (${sender.role}) sent you a workspace pairing request with code ${sender.inviteCode}.`,
         senderId: sender.id,
         senderName: sender.name,
         senderAvatar: sender.avatar,
@@ -214,11 +225,17 @@ class CloudSyncManager {
         isRead: false,
       };
 
-      const updatedRequests = [newRequest, ...(currentData.partnerRequests || [])];
+      const updatedRequests = [newRequest, ...(currentData.partnerRequests || []).filter((r) => r.fromUserId !== sender.id || r.targetInviteCode !== normalizedCode)];
       const updatedNotifs = [newNotif, ...(currentData.notifications || [])].slice(0, 50);
+
+      const updatedFounders = { ...currentData.founders };
+      if (targetPartner) {
+        updatedFounders[targetPartner.id] = targetPartner;
+      }
 
       const updatedData: SharedAppData = {
         ...currentData,
+        founders: updatedFounders,
         partnerRequests: updatedRequests,
         notifications: updatedNotifs,
       };
@@ -226,8 +243,8 @@ class CloudSyncManager {
       await this.syncState(updatedData);
 
       // Save to Firebase collections
-      await setDoc(doc(db, 'partner_requests', newRequest.id), newRequest);
-      await setDoc(doc(db, 'notifications', newNotif.id), newNotif);
+      await setDoc(doc(db, 'partner_requests', newRequest.id), sanitizeForFirestore(newRequest));
+      await setDoc(doc(db, 'notifications', newNotif.id), sanitizeForFirestore(newNotif));
 
       // Call Express endpoint
       fetch('/api/partner/invite', {
@@ -238,7 +255,7 @@ class CloudSyncManager {
 
       return {
         success: true,
-        message: `Invite sent to ${normalizedCode}!`,
+        message: `Invite request sent to ${normalizedCode}!`,
         isTargetOnline: !!targetPartner,
         targetPartnerName: targetPartner ? targetPartner.name : null,
       };
@@ -253,9 +270,9 @@ class CloudSyncManager {
   // Send Custom Reminder / Nudge / Alert Notification to Partner
   public async sendPartnerNudge(senderId: string, title: string, message: string): Promise<boolean> {
     try {
-      const currentData = loadAppData();
+      const currentData = cleanAppData(loadAppData());
       const sender = currentData.founders[senderId] || { name: 'Co-Founder', avatar: '' };
-      const partnerId = currentData.partnerConnection.pairedUserId;
+      const partner = getPartnerForUser(currentData, senderId);
 
       const newNotif: AppNotification = {
         id: `nudge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -265,7 +282,7 @@ class CloudSyncManager {
         senderId: senderId,
         senderName: sender.name,
         senderAvatar: sender.avatar,
-        targetUserId: partnerId || 'all',
+        targetUserId: partner ? partner.id : 'all',
         actionTab: 'partners',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isoTime: new Date().toISOString(),
@@ -279,7 +296,7 @@ class CloudSyncManager {
       };
 
       await this.syncState(updatedData);
-      await setDoc(doc(db, 'notifications', newNotif.id), newNotif);
+      await setDoc(doc(db, 'notifications', newNotif.id), sanitizeForFirestore(newNotif));
 
       return true;
     } catch (e) {
@@ -288,10 +305,10 @@ class CloudSyncManager {
     }
   }
 
-  // Accept partner request
+  // Accept partner request - Updates BOTH partners bilaterally
   public async acceptPartnerRequest(requestId: string, activeUserId: string): Promise<boolean> {
     try {
-      const currentData = loadAppData();
+      const currentData = cleanAppData(loadAppData());
       const activeUser = currentData.founders[activeUserId];
       const request = (currentData.partnerRequests || []).find((r) => r.id === requestId);
 
@@ -318,11 +335,12 @@ class CloudSyncManager {
         r.id === requestId ? { ...r, status: 'accepted' as const } : r
       );
 
+      // Notification sent to partnerUser (sender of invite)
       const newNotif: AppNotification = {
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         type: 'partner',
-        title: '🎉 Partner Linked Successfully!',
-        message: `${activeUser.name} accepted your connection request. Real-time co-founder mode is live!`,
+        title: '🎉 Partner Request Accepted!',
+        message: `${activeUser.name} (${activeUser.role}) accepted your connection request! Real-time workspace sync is now live.`,
         senderId: activeUser.id,
         senderName: activeUser.name,
         senderAvatar: activeUser.avatar,
@@ -335,20 +353,37 @@ class CloudSyncManager {
 
       const updatedFounders = {
         ...currentData.founders,
-        [request.fromUserId]: partnerUser,
+        [partnerUser.id]: partnerUser,
         [activeUser.id]: activeUser,
+      };
+
+      // Bilateral connection mappings
+      const connActive: PartnerConnection = {
+        partnerInviteCode: partnerUser.inviteCode,
+        status: 'accepted',
+        pairedUserId: partnerUser.id,
+        pairedAt: new Date().toISOString(),
+      };
+
+      const connPartner: PartnerConnection = {
+        partnerInviteCode: activeUser.inviteCode,
+        status: 'accepted',
+        pairedUserId: activeUser.id,
+        pairedAt: new Date().toISOString(),
+      };
+
+      const nextPartnerConnections = {
+        ...(currentData.partnerConnections || {}),
+        [activeUser.id]: connActive,
+        [partnerUser.id]: connPartner,
       };
 
       const updatedData: SharedAppData = {
         ...currentData,
         founders: updatedFounders,
         partnerRequests: updatedRequests,
-        partnerConnection: {
-          partnerInviteCode: partnerUser.inviteCode,
-          status: 'accepted',
-          pairedUserId: partnerUser.id,
-          pairedAt: new Date().toISOString(),
-        },
+        partnerConnection: connActive,
+        partnerConnections: nextPartnerConnections,
         partnerStatuses: {
           ...currentData.partnerStatuses,
           [activeUser.id]: {
@@ -373,6 +408,9 @@ class CloudSyncManager {
 
       await this.syncState(updatedData);
 
+      // Save notification to Firestore
+      await setDoc(doc(db, 'notifications', newNotif.id), sanitizeForFirestore(newNotif));
+
       // Call Express server
       fetch('/api/partner/accept', {
         method: 'POST',
@@ -388,17 +426,48 @@ class CloudSyncManager {
   }
 
   // Disconnect partner on BOTH sides
-  public async disconnectPartner(): Promise<boolean> {
+  public async disconnectPartner(activeUserId?: string): Promise<boolean> {
     try {
-      const currentData = loadAppData();
+      const currentData = cleanAppData(loadAppData());
+      const currentUserId = activeUserId || currentData.activeFounderId;
+      const partner = getPartnerForUser(currentData, currentUserId);
+
+      const nextConnections = { ...(currentData.partnerConnections || {}) };
+      if (currentUserId) delete nextConnections[currentUserId];
+      if (partner) delete nextConnections[partner.id];
+
+      const emptyConn: PartnerConnection = {
+        partnerInviteCode: '',
+        status: 'none',
+        pairedUserId: '',
+      };
+
+      let nextNotifs = currentData.notifications || [];
+      if (partner && currentUserId && currentData.founders[currentUserId]) {
+        const sender = currentData.founders[currentUserId];
+        const notif: AppNotification = {
+          id: `disnotif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'partner',
+          title: '🔌 Workspace Disconnected',
+          message: `${sender.name} disconnected the co-founder workspace connection.`,
+          senderId: currentUserId,
+          senderName: sender.name,
+          senderAvatar: sender.avatar,
+          targetUserId: partner.id,
+          actionTab: 'partners',
+          timestamp: 'Just now',
+          isoTime: new Date().toISOString(),
+          isRead: false,
+        };
+        nextNotifs = [notif, ...nextNotifs].slice(0, 50);
+        setDoc(doc(db, 'notifications', notif.id), sanitizeForFirestore(notif)).catch(() => {});
+      }
 
       const updatedData: SharedAppData = {
         ...currentData,
-        partnerConnection: {
-          partnerInviteCode: '',
-          status: 'none',
-          pairedUserId: '',
-        },
+        partnerConnection: emptyConn,
+        partnerConnections: nextConnections,
+        notifications: nextNotifs,
         partnerRequests: (currentData.partnerRequests || []).map((r) => ({
           ...r,
           status: r.status === 'accepted' ? ('declined' as const) : r.status,
@@ -422,8 +491,9 @@ class CloudSyncManager {
   // Sync entire app state to Firestore doc and Express server
   public async syncState(data: SharedAppData): Promise<void> {
     try {
-      saveAppData(data, false);
-      const cleanData = sanitizeForFirestore(data);
+      const cleaned = cleanAppData(data);
+      saveAppData(cleaned, false);
+      const cleanData = sanitizeForFirestore(cleaned);
       const docRef = doc(db, 'workspace', 'shared_state');
       await setDoc(docRef, cleanData, { merge: true });
 

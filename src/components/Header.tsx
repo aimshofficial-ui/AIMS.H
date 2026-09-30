@@ -18,6 +18,7 @@ import {
   Copy,
   Check,
   Search,
+  Globe,
   Wifi,
   Signal,
   Battery,
@@ -29,6 +30,7 @@ import {
 import { SharedAppData } from '../types';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { downloadOneTimeBackup } from '../utils/storage';
+import { requestMobilePermission } from '../utils/notifications';
 import { BottomTabId } from './BottomNavBar';
 
 interface HeaderProps {
@@ -65,6 +67,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('9:41');
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Auto request notification permission on mount
+  useEffect(() => {
+    try {
+      requestMobilePermission();
+    } catch (e) {
+      // ignore
+    }
+  }, []);
 
   // Live time for status notch
   useEffect(() => {

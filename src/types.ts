@@ -225,6 +225,7 @@ export interface SharedAppData {
   activeFounderId: string;
   agencySettings?: AgencySettings;
   partnerConnection: PartnerConnection;
+  partnerConnections?: Record<string, PartnerConnection>;
   partnerRequests: PartnerRequest[];
   partnerStatuses: Record<string, PartnerActivityStatus>;
   missions: MissionItem[];

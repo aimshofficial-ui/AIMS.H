@@ -31,6 +31,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { AgencyMeeting, SharedAppData, ChatMessage } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 import { triggerMobileAlert, pushAppNotification } from '../../utils/notifications';
 
 interface MeetingHubProps {
@@ -123,14 +125,8 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const partnerUser = foundersList.find((f) => f.id !== activeUser.id) || {
-    id: 'user_2',
-    name: 'Partner',
-    role: 'Co-Founder',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
-  };
-
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string>(partnerUser.id || 'all');
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>(partnerUser?.id || 'all');
   const meetings: AgencyMeeting[] = appData.meetings || [];
   const currentMeeting = meetings[0] || null;
 
@@ -160,6 +156,8 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
       actionTab: 'meetings',
       timestamp: 'Just now',
     });
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setIsVibrating(true);
@@ -217,6 +215,8 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
       }
     );
 
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
     setIsAddModalOpen(false);
   };
@@ -257,6 +257,8 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
       }
     );
 
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
     if (viewingMeeting?.id === meeting.id) {
       setViewingMeeting({ ...viewingMeeting, status: 'accepted' });
@@ -384,10 +386,10 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
                 <span className="text-white/40">⇄</span>
 
                 <div className="relative">
-                  <img src={partnerUser.avatar} alt="Partner" className="w-7 h-7 rounded-full object-cover border border-white" />
+                  <img src={partnerUser ? partnerUser.avatar : activeUser.avatar} alt="Partner" className="w-7 h-7 rounded-full object-cover border border-white" />
                   <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 </div>
-                <span className="text-xs font-bold text-white">{partnerUser.name.split(' ')[0]}</span>
+                <span className="text-xs font-bold text-white">{partnerUser ? partnerUser.name.split(' ')[0] : 'Partner'}</span>
               </div>
             </div>
 
@@ -528,23 +530,23 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ appData, onUpdateData })
         <div className="relative aspect-video rounded-3xl overflow-hidden bg-slate-900 border-2 border-purple-500/40 shadow-md flex flex-col justify-between p-3.5 group">
           <div className="flex items-center justify-between z-10">
             <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/60 text-white border border-white/20">
-              {partnerUser.name.split(' ')[0]}'s Feed
+              {partnerUser ? partnerUser.name.split(' ')[0] : 'Partner'}'s Feed
             </span>
             <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full">
-              Connected
+              {partnerUser ? 'Connected' : 'Waiting...'}
             </span>
           </div>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center space-y-2">
             <div className="relative">
               <img
-                src={partnerUser.avatar}
-                alt={partnerUser.name}
+                src={partnerUser ? partnerUser.avatar : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
+                alt={partnerUser ? partnerUser.name : 'Partner'}
                 className="w-18 h-18 sm:w-20 sm:h-20 rounded-full object-cover border-4 border-white/80 shadow-xl"
               />
               <span className="absolute bottom-0 right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full animate-ping" />
             </div>
-            <p className="text-xs font-bold text-white shadow-xs">{partnerUser.name}</p>
+            <p className="text-xs font-bold text-white shadow-xs">{partnerUser ? partnerUser.name : 'Co-Founder Partner'}</p>
           </div>
 
           <div className="flex items-center justify-center gap-2 z-10">

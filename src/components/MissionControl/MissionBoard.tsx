@@ -33,6 +33,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { MissionItem, MissionPriority, MissionStatus, AssigneeId, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 import { pushAppNotification } from '../../utils/notifications';
 
 interface MissionBoardProps {
@@ -147,13 +149,8 @@ export const MissionBoard: React.FC<MissionBoardProps> = ({
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const isPartnerLinked = appData.partnerConnection.status === 'accepted' && 
-    !!appData.partnerConnection.pairedUserId && 
-    !!appData.founders[appData.partnerConnection.pairedUserId];
-
-  const partnerUser = isPartnerLinked 
-    ? appData.founders[appData.partnerConnection.pairedUserId] 
-    : null;
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
+  const isPartnerLinked = !!partnerUser;
 
   const todayIso = new Date().toISOString().split('T')[0];
   const meetings = appData.meetings || [];
@@ -227,6 +224,8 @@ export const MissionBoard: React.FC<MissionBoardProps> = ({
         timestamp: 'Agreed',
       }
     );
+    saveAppData(updatedWithNotif, true);
+    cloudSync.syncState(updatedWithNotif);
     onUpdateData(updatedWithNotif);
   };
 
@@ -238,7 +237,8 @@ export const MissionBoard: React.FC<MissionBoardProps> = ({
       return { ...m, status: nextStatus };
     });
     const updated = { ...appData, missions: updatedMissions };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -256,7 +256,8 @@ export const MissionBoard: React.FC<MissionBoardProps> = ({
       };
     });
     const updated = { ...appData, habits: updatedHabits };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -266,7 +267,8 @@ export const MissionBoard: React.FC<MissionBoardProps> = ({
       ...appData,
       missions: appData.missions.filter((m) => m.id !== missionId),
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -306,6 +308,8 @@ export const MissionBoard: React.FC<MissionBoardProps> = ({
       }
     );
 
+    saveAppData(updatedWithNotif, true);
+    cloudSync.syncState(updatedWithNotif);
     onUpdateData(updatedWithNotif);
 
     setNewTitle('');

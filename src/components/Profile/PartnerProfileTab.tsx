@@ -284,18 +284,8 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
 
   const handleDisconnect = async () => {
     if (!confirm('Are you sure you want to disconnect from your co-founder partner?')) return;
-    await cloudSync.disconnectPartner();
-    const updatedData: SharedAppData = {
-      ...appData,
-      partnerConnection: {
-        partnerInviteCode: '',
-        status: 'none',
-        pairedUserId: '',
-      },
-    };
-    saveAppData(updatedData, true);
-    onUpdateData(updatedData);
-    setSuccessMsg('Partner disconnected cleanly.');
+    await cloudSync.disconnectPartner(activeUser.id);
+    setSuccessMsg('Partner disconnected cleanly on both sides.');
     setTimeout(() => setSuccessMsg(''), 3000);
   };
 

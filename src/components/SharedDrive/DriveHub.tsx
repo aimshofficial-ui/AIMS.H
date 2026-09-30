@@ -30,6 +30,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { DriveFolder, ResourceLink, CuratedVaultVideo, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
+import { getPartnerForUser } from '../../utils/partnerHelper';
 
 interface DriveHubProps {
   appData: SharedAppData;
@@ -144,7 +146,7 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const partnerUser = foundersList.find((f) => f.id !== activeUser.id);
+  const partnerUser = getPartnerForUser(appData, activeUser.id);
 
   const handleCopyLink = (url: string, id: string) => {
     navigator.clipboard.writeText(url);
@@ -157,14 +159,16 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
       r.id === resId ? { ...r, isFavorite: !r.isFavorite } : r
     );
     const updated = { ...appData, resources: updatedRes };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
   const handleDeleteResource = (resId: string) => {
     const updatedRes = appData.resources.filter((r) => r.id !== resId);
     const updated = { ...appData, resources: updatedRes };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
   };
 
@@ -188,7 +192,8 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
       ...appData,
       resources: [newRes, ...appData.resources],
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setResTitle('');
@@ -213,7 +218,8 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
       ...appData,
       folders: [...appData.folders, newFolder],
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setFolderName('');
