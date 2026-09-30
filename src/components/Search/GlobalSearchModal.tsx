@@ -206,7 +206,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         title: msg.content,
         subtitle: `${msg.senderName} • ${msg.timestamp}`,
         badge: 'Chat Message',
-        targetTab: 'chat',
+        targetTab: 'search',
       });
     }
   });

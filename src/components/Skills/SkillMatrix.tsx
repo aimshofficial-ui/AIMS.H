@@ -71,6 +71,14 @@ const STAGE_CONFIG: Record<
     barColor: 'from-emerald-400 to-teal-600',
     glowColor: 'shadow-emerald-500/20',
   },
+  'In Learning': {
+    label: 'In Learning',
+    min: 10,
+    max: 40,
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200/80',
+    barColor: 'from-blue-400 to-indigo-600',
+    glowColor: 'shadow-blue-500/20',
+  },
 };
 
 const QUICK_PRESETS = [

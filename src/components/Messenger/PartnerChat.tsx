@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
 import { pushAppNotification } from '../../utils/notifications';
 
 interface PartnerChatProps {
@@ -70,7 +71,7 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
   }, [appData.messages, isSelectionMode]);
 
   // Send pure text message with real-time push notification & vibration
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const textToSend = inputText.trim();
     if (!textToSend) return;
@@ -86,30 +87,10 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
       reactions: {},
     };
 
-    const targetPartner = recipientFilter === 'all' ? (partnerUser?.id || 'all') : recipientFilter;
-
-    // Push notification to partner and update app state
-    const updatedWithNotif = pushAppNotification(
-      {
-        ...appData,
-        messages: [...appData.messages, newMsg],
-      },
-      {
-        type: 'message',
-        title: `💬 ${activeUser.name}`,
-        message: textToSend,
-        senderId: activeUser.id,
-        senderName: activeUser.name,
-        senderAvatar: activeUser.avatar,
-        targetUserId: targetPartner,
-        actionTab: 'chat',
-        timestamp: newMsg.timestamp,
-      }
-    );
-
-    saveAppData(updatedWithNotif, true);
-    onUpdateData(updatedWithNotif);
     setInputText('');
+    const updated = { ...appData, messages: [...(appData.messages || []), newMsg] };
+    saveAppData(updated, true);
+    await cloudSync.syncState(updated);
   };
 
   // Keyboard shortcut: Enter to send, Shift+Enter for newline
@@ -121,25 +102,19 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
   };
 
   // Delete a single message
-  const handleDeleteMessage = (msgId: string) => {
-    const updated = {
-      ...appData,
-      messages: appData.messages.filter((m) => m.id !== msgId),
-    };
+  const handleDeleteMessage = async (msgId: string) => {
+    const updated = { ...appData, messages: (appData.messages || []).filter((m) => m.id !== msgId) };
     saveAppData(updated, true);
-    onUpdateData(updated);
+    await cloudSync.syncState(updated);
     setToastNotice('🗑️ Message deleted');
     setTimeout(() => setToastNotice(''), 2500);
   };
 
   // Clear all messages
-  const handleConfirmClearAll = () => {
-    const updated = {
-      ...appData,
-      messages: [],
-    };
+  const handleConfirmClearAll = async () => {
+    const updated = { ...appData, messages: [] };
     saveAppData(updated, true);
-    onUpdateData(updated);
+    await cloudSync.syncState(updated);
     setIsClearModalOpen(false);
     setIsSelectionMode(false);
     setSelectedIds([]);
@@ -148,14 +123,11 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
   };
 
   // Delete selected batch
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
-    const updated = {
-      ...appData,
-      messages: appData.messages.filter((m) => !selectedIds.includes(m.id)),
-    };
+    const updated = { ...appData, messages: (appData.messages || []).filter((m) => !selectedIds.includes(m.id)) };
     saveAppData(updated, true);
-    onUpdateData(updated);
+    await cloudSync.syncState(updated);
     setToastNotice(`🗑️ Deleted ${selectedIds.length} message(s)`);
     setSelectedIds([]);
     setIsSelectionMode(false);

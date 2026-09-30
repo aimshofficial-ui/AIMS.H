@@ -19,6 +19,7 @@ import { PartnersHubTab } from './components/Partners/PartnersHubTab';
 import { NotificationBellDrawer } from './components/Notifications/NotificationBellDrawer';
 import { NotificationPermissionBanner } from './components/Notifications/NotificationPermissionBanner';
 import { GlobalSearchModal } from './components/Search/GlobalSearchModal';
+import { GlobalSearchIntelligenceHub } from './components/Search/GlobalSearchIntelligenceHub';
 import { OpeningAnimationModal } from './components/Splash/OpeningAnimationModal';
 import { CleanLightOnboarding } from './components/Auth/CleanLightOnboarding';
 import { PWAGuideModal } from './components/PWAGuideModal';
@@ -26,6 +27,7 @@ import { MeetingHub } from './components/Meetings/MeetingHub';
 import { AgencyClientsHub } from './components/Clients/AgencyClientsHub';
 import { SharedAppData } from './types';
 import { loadAppData, saveAppData, subscribeToDataSync } from './utils/storage';
+import { cloudSync } from './utils/cloudSync';
 import { usePWAInstall } from './hooks/usePWAInstall';
 
 export default function App() {
@@ -41,17 +43,34 @@ export default function App() {
 
   const { isInstallable, install } = usePWAInstall();
 
-  // Subscribe to real-time updates across multiple tabs / windows
+  // Subscribe to real-time updates across multiple tabs / windows & remote cloud SSE
   useEffect(() => {
-    const unsubscribe = subscribeToDataSync((newData) => {
+    const unsubLocal = subscribeToDataSync((newData) => {
       setAppData(newData);
     });
+
+    const unsubCloud = cloudSync.subscribe((cloudData) => {
+      setAppData(cloudData);
+    });
+
+    cloudSync.init((cloudData) => {
+      setAppData(cloudData);
+    });
+
     return () => {
-      unsubscribe();
+      unsubLocal();
+      unsubCloud();
     };
   }, []);
 
   const activeUser = appData.activeFounderId ? appData.founders[appData.activeFounderId] : null;
+
+  // Auto-register active user on cloud server so partners on different devices can find them by invite code
+  useEffect(() => {
+    if (activeUser && activeUser.id && activeUser.inviteCode) {
+      cloudSync.registerUser(activeUser);
+    }
+  }, [activeUser?.id, activeUser?.inviteCode, activeUser?.name, activeUser?.avatar]);
 
   // If no user is logged in or active, show the clean onboarding / login screen
   if (!activeUser) {
@@ -168,8 +187,12 @@ export default function App() {
               <HabitHeatmap appData={appData} onUpdateData={setAppData} />
             )}
 
-            {activeTab === 'chat' && (
-              <PartnerChat appData={appData} onUpdateData={setAppData} />
+            {(activeTab === 'search' || (activeTab as string) === 'chat') && (
+              <GlobalSearchIntelligenceHub
+                appData={appData}
+                onUpdateData={setAppData}
+                onNavigateToTab={(tab) => setActiveTab(tab as any)}
+              />
             )}
 
             {activeTab === 'analytics' && (
@@ -180,7 +203,7 @@ export default function App() {
               <PartnersHubTab
                 appData={appData}
                 onUpdateData={setAppData}
-                onNavigateToChat={() => setActiveTab('chat')}
+                onNavigateToChat={() => setActiveTab('search')}
               />
             )}
 

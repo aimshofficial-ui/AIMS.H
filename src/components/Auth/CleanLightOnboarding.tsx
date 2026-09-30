@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { SharedAppData, UserProfile } from '../../types';
 import { AVATAR_SELECTIONS, generateInviteCode, saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
 
 interface CleanLightOnboardingProps {
   appData: SharedAppData;
@@ -310,28 +311,23 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
       [newId]: newProfile,
     };
 
-    let updatedPartnerConnection = { ...appData.partnerConnection };
-    const trimmedPartnerCode = partnerCode.trim().toUpperCase();
-    if (trimmedPartnerCode) {
-      const matched = Object.values(appData.founders).find((f) => f.inviteCode === trimmedPartnerCode);
-      updatedPartnerConnection = {
-        partnerInviteCode: trimmedPartnerCode,
-        status: 'accepted',
-        pairedUserId: matched ? matched.id : `partner_${Date.now()}`,
-        pairedAt: new Date().toISOString(),
-      };
-    }
-
     const updatedData: SharedAppData = {
       ...appData,
       activeFounderId: newId,
       founders: updatedFounders,
-      partnerConnection: updatedPartnerConnection,
     };
 
     setPendingSuccessUser(newProfile);
     setShowSuccessModal(true);
-    saveAppData(updatedData);
+    saveAppData(updatedData, true);
+
+    // Register user to cloud server
+    cloudSync.registerUser(newProfile);
+
+    const trimmedPartnerCode = partnerCode.trim().toUpperCase();
+    if (trimmedPartnerCode) {
+      cloudSync.sendPartnerInvite(newId, trimmedPartnerCode);
+    }
   };
 
   // Secure Private Login

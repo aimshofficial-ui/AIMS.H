@@ -22,6 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { SharedAppData, PartnerRequest, UserProfile, PartnerConnection } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
 import { pushAppNotification, triggerMobileAlert } from '../../utils/notifications';
 
 interface PartnersHubTabProps {
@@ -136,7 +137,7 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
   };
 
   // Send a pairing request to another partner's invite code
-  const handleSendPairRequest = (e: React.FormEvent) => {
+  const handleSendPairRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setRequestSentNotice('');
 
@@ -148,131 +149,30 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
       return;
     }
 
-    const newReq: PartnerRequest = {
-      id: `req-${Date.now()}`,
-      fromUserId: activeUser.id,
-      fromUserName: activeUser.name,
-      fromUserAvatar: activeUser.avatar,
-      fromUserRole: activeUser.role,
-      fromInviteCode: activeUser.inviteCode,
-      targetInviteCode: targetCode,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'pending',
-    };
+    // Call CloudSync to broadcast invite to the real user on any device
+    const res = await cloudSync.sendPartnerInvite(activeUser.id, targetCode);
 
-    // Ensure my profile is stored in founders so recipient knows my details
-    const updatedFounders = {
-      ...appData.founders,
-      [activeUser.id]: activeUser,
-    };
+    if (res.success) {
+      setPartnerInputCode('');
+      setRequestSentNotice(
+        res.isTargetOnline
+          ? `🎉 Connection request sent directly to ${res.targetPartnerName || targetCode}! They can now click Allow & Connect.`
+          : `✅ Connection request registered for ${targetCode}! When your partner opens the app with code ${targetCode}, they will see the alert.`
+      );
 
-    const updated = pushAppNotification(
-      {
-        ...appData,
-        founders: updatedFounders,
-        partnerRequests: [newReq, ...appData.partnerRequests],
-      },
-      {
-        type: 'partner',
-        title: `🤝 New Partner Request from ${activeUser.name}`,
-        message: `${activeUser.name} (${activeUser.role}) sent you a workspace pairing request with code ${activeUser.inviteCode}.`,
-        senderId: activeUser.id,
-        senderName: activeUser.name,
-        senderAvatar: activeUser.avatar,
-        targetUserId: targetCode,
-        actionTab: 'partners',
-        timestamp: 'Just now',
-      }
-    );
-
-    saveAppData(updated, true);
-    onUpdateData(updated);
-    setPartnerInputCode('');
-    setRequestSentNotice(`Connection request sent to ${targetCode}! When your partner accepts, you will be connected in real-time.`);
-
-    triggerMobileAlert({
-      title: '🤝 Connection Request Sent!',
-      message: `Waiting for ${targetCode} to accept...`,
-      vibratePattern: [150, 100, 150],
-    });
+      triggerMobileAlert({
+        title: '🤝 Connection Request Sent!',
+        message: `Waiting for ${targetCode} to accept...`,
+        vibratePattern: [150, 100, 150],
+      });
+    } else {
+      setRequestSentNotice(`⚠️ ${res.error || 'Failed to send invite'}`);
+    }
   };
 
   // Accept incoming request
-  const handleAcceptRequest = (req: PartnerRequest) => {
-    const updatedRequests = appData.partnerRequests.map((r) =>
-      r.id === req.id ? { ...r, status: 'accepted' as const } : r
-    );
-
-    // Save partner into founders
-    const partnerProfile: UserProfile = appData.founders[req.fromUserId] || {
-      id: req.fromUserId,
-      name: req.fromUserName,
-      avatar: req.fromUserAvatar,
-      role: req.fromUserRole,
-      inviteCode: req.fromInviteCode,
-      email: `${req.fromUserName.toLowerCase().replace(/\s+/g, '_')}@aimsh.agency`,
-      username: req.fromUserName.toLowerCase().replace(/\s+/g, '_'),
-      bio: 'Co-Founder & Workspace Partner',
-      hobbies: [],
-      habitStyles: [],
-      screenTimeHours: '3 - 4 Hours',
-      socials: {},
-      focusAreas: [],
-      primaryObjective: 'Scale agency and collaborate together.',
-    };
-
-    const updatedFounders = {
-      ...appData.founders,
-      [req.fromUserId]: partnerProfile,
-      [activeUser.id]: activeUser,
-    };
-
-    const updatedConnection: PartnerConnection = {
-      partnerInviteCode: req.fromInviteCode,
-      status: 'accepted',
-      pairedUserId: req.fromUserId,
-      pairedAt: new Date().toISOString(),
-    };
-
-    const updatedStatuses = {
-      ...appData.partnerStatuses,
-      [req.fromUserId]: {
-        userId: req.fromUserId,
-        isOnline: true,
-        currentTask: 'Connected to shared agency workspace',
-        availability: 'Available for Execution' as const,
-        lastSeen: 'Active now',
-        sessionMinutes: 10,
-      },
-      [activeUser.id]: myStatus,
-    };
-
-    const baseData: SharedAppData = {
-      ...appData,
-      founders: updatedFounders,
-      partnerRequests: updatedRequests,
-      partnerConnection: updatedConnection,
-      partnerStatuses: updatedStatuses,
-    };
-
-    const updatedData = pushAppNotification(
-      baseData,
-      {
-        type: 'partner',
-        title: '🎉 Partner Linked Successfully!',
-        message: `${activeUser.name} accepted the workspace pairing request. Real-time sync is now live!`,
-        senderId: activeUser.id,
-        senderName: activeUser.name,
-        senderAvatar: activeUser.avatar,
-        targetUserId: req.fromUserId,
-        actionTab: 'partners',
-        timestamp: 'Just now',
-      }
-    );
-
-    saveAppData(updatedData, true);
-    onUpdateData(updatedData);
-
+  const handleAcceptRequest = async (req: PartnerRequest) => {
+    await cloudSync.acceptPartnerRequest(req.id, activeUser.id);
     triggerMobileAlert({
       title: '🎉 Partner Connected!',
       message: `You are now linked with ${req.fromUserName}!`,
@@ -290,12 +190,14 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
       partnerRequests: updatedRequests,
     };
     saveAppData(updatedData, true);
+    cloudSync.syncState(updatedData);
     onUpdateData(updatedData);
   };
 
   // Disconnect partner
-  const handleDisconnectPartner = () => {
+  const handleDisconnectPartner = async () => {
     if (!confirm('Are you sure you want to disconnect from this partner?')) return;
+    await cloudSync.disconnectPartner();
     const updatedConnection: PartnerConnection = {
       partnerInviteCode: '',
       status: 'none',

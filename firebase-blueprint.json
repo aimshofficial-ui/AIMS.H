@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User founder profile and credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "role": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "bio": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["id", "name", "inviteCode"]
+    },
+    "PartnerRequest": {
+      "title": "PartnerRequest",
+      "description": "Bilateral partner pairing request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUserId": { "type": "string" },
+        "fromUserName": { "type": "string" },
+        "fromUserAvatar": { "type": "string" },
+        "fromUserRole": { "type": "string" },
+        "fromInviteCode": { "type": "string" },
+        "targetInviteCode": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] }
+      },
+      "required": ["id", "fromUserId", "targetInviteCode", "status"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "Real-time user notification and nudge alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "actionTab": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["id", "title", "message"]
+    }
+  },
+  "firestore": {
+    "/workspace/shared_state": {
+      "schema": "SharedAppData",
+      "description": "Shared real-time agency state document"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile collection"
+    },
+    "/partner_requests/{reqId}": {
+      "schema": "PartnerRequest",
+      "description": "Partner invite requests collection"
+    },
+    "/notifications/{notifId}": {
+      "schema": "AppNotification",
+      "description": "Real-time user notifications and nudges collection"
+    }
+  }
+}

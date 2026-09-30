@@ -1,4 +1,4 @@
-export type MasteryStage = 'Beginner' | 'Intermediate' | 'Expert';
+export type MasteryStage = 'Beginner' | 'Intermediate' | 'Expert' | 'In Learning';
 export type MissionPriority = 'High' | 'Medium' | 'Low';
 export type MissionStatus = 'To-Do' | 'In Progress' | 'Completed';
 export type AssigneeId = 'founder_1' | 'founder_2' | 'both';
@@ -200,7 +200,7 @@ export interface AgencyClient {
 
 export interface AppNotification {
   id: string;
-  type: 'meeting' | 'schedule' | 'message' | 'partner' | 'habit' | 'file' | 'client';
+  type: 'meeting' | 'schedule' | 'message' | 'partner' | 'habit' | 'file' | 'client' | 'reminder';
   title: string;
   message: string;
   senderId: string;

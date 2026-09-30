@@ -19,10 +19,14 @@ import {
   TrendingUp,
   Flame,
   CheckCircle,
-  Volume2
+  Volume2,
+  Send,
+  Zap,
+  CheckCheck
 } from 'lucide-react';
 import { SharedAppData, PartnerRequest, AppNotification, UserProfile } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { cloudSync } from '../../utils/cloudSync';
 import { triggerMobileAlert, requestMobilePermission, pushAppNotification, isMobileAlertsAllowed } from '../../utils/notifications';
 
 interface NotificationBellDrawerProps {
@@ -32,6 +36,14 @@ interface NotificationBellDrawerProps {
   onUpdateData: (data: SharedAppData) => void;
   onNavigateToTab?: (tab: string) => void;
 }
+
+const PRESET_REMINDERS = [
+  '⏰ Meeting starting in 10 minutes! Get ready.',
+  '🚀 Please review the new client deliverable in Drive!',
+  '⚡ Time for a 25-minute execution focus sprint!',
+  '🎯 New high-ticket client lead added to Client Sheet!',
+  '📊 Check the new agency skills added to Skills Matrix.',
+];
 
 export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
   isOpen,
@@ -43,9 +55,23 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
   const [isAllowed, setIsAllowed] = useState<boolean>(() => isMobileAlertsAllowed());
   const [feedbackNotice, setFeedbackNotice] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showSendNudge, setShowSendNudge] = useState(false);
+  const [customNudgeText, setCustomNudgeText] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
 
   useEffect(() => {
     setIsAllowed(isMobileAlertsAllowed());
+    if (isOpen) {
+      // Mark notifications as read when opening drawer
+      const hasUnread = (appData.notifications || []).some((n) => !n.isRead);
+      if (hasUnread) {
+        const marked = (appData.notifications || []).map((n) => ({ ...n, isRead: true }));
+        const updated = { ...appData, notifications: marked };
+        saveAppData(updated, false);
+        cloudSync.syncState(updated);
+        onUpdateData(updated);
+      }
+    }
   }, [isOpen]);
 
   const activeUser = appData.founders[appData.activeFounderId] || {
@@ -96,84 +122,33 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
     setTimeout(() => setFeedbackNotice(''), 3000);
   };
 
+  // Send Partner Nudge / Reminder
+  const handleSendNudgeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const textToSend = customNudgeText.trim() || selectedPreset;
+    if (!textToSend) return;
+
+    await cloudSync.sendPartnerNudge(
+      activeUser.id,
+      `⏰ Reminder from ${activeUser.name}`,
+      textToSend
+    );
+
+    triggerMobileAlert({
+      title: `⏰ Reminder Sent!`,
+      message: textToSend,
+    });
+
+    setCustomNudgeText('');
+    setSelectedPreset('');
+    setShowSendNudge(false);
+    setFeedbackNotice('🚀 Reminder notification sent to partner!');
+    setTimeout(() => setFeedbackNotice(''), 3500);
+  };
+
   // Accept & Link Partner (Allow partner connection)
-  const handleAcceptRequest = (req: PartnerRequest) => {
-    const updatedRequests = (appData.partnerRequests || []).map((r) =>
-      r.id === req.id ? { ...r, status: 'accepted' as const } : r
-    );
-
-    const partnerProfile: UserProfile = appData.founders[req.fromUserId] || {
-      id: req.fromUserId,
-      name: req.fromUserName,
-      avatar: req.fromUserAvatar,
-      role: req.fromUserRole,
-      inviteCode: req.fromInviteCode,
-      email: `${req.fromUserName.toLowerCase().replace(/\s+/g, '_')}@aimsh.agency`,
-      username: req.fromUserName.toLowerCase().replace(/\s+/g, '_'),
-      bio: 'Co-Founder & Workspace Partner',
-      hobbies: [],
-      habitStyles: [],
-      screenTimeHours: '3 - 4 Hours',
-      socials: {},
-      focusAreas: [],
-      primaryObjective: 'Scale agency and collaborate together.',
-    };
-
-    const updatedFounders = {
-      ...appData.founders,
-      [req.fromUserId]: partnerProfile,
-      [activeUser.id]: activeUser,
-    };
-
-    const updatedData: SharedAppData = {
-      ...appData,
-      founders: updatedFounders,
-      partnerRequests: updatedRequests,
-      partnerConnection: {
-        partnerInviteCode: req.fromInviteCode,
-        status: 'accepted',
-        pairedUserId: req.fromUserId,
-        pairedAt: new Date().toISOString(),
-      },
-      partnerStatuses: {
-        ...appData.partnerStatuses,
-        [req.fromUserId]: {
-          userId: req.fromUserId,
-          isOnline: true,
-          currentTask: 'Connected to shared agency workspace',
-          availability: 'Available for Execution',
-          lastSeen: 'Active now',
-          sessionMinutes: 10,
-        },
-        [activeUser.id]: {
-          userId: activeUser.id,
-          isOnline: true,
-          currentTask: 'Connected to shared agency workspace',
-          availability: 'Available for Execution',
-          lastSeen: 'Active now',
-          sessionMinutes: 10,
-        },
-      },
-    };
-
-    const updatedWithNotif = pushAppNotification(
-      updatedData,
-      {
-        type: 'partner',
-        title: '🎉 Partner Linked Successfully!',
-        message: `${activeUser.name} and ${req.fromUserName} are now connected in real-time.`,
-        senderId: activeUser.id,
-        senderName: activeUser.name,
-        senderAvatar: activeUser.avatar,
-        targetUserId: req.fromUserId,
-        actionTab: 'partners',
-        timestamp: 'Just now',
-      }
-    );
-
-    saveAppData(updatedWithNotif, true);
-    onUpdateData(updatedWithNotif);
-
+  const handleAcceptRequest = async (req: PartnerRequest) => {
+    await cloudSync.acceptPartnerRequest(req.id, activeUser.id);
     triggerMobileAlert({
       title: '🎉 Partner Connected!',
       message: `You are now linked with ${req.fromUserName}!`,
@@ -190,6 +165,7 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
       partnerRequests: updatedRequests,
     };
     saveAppData(updatedData, true);
+    cloudSync.syncState(updatedData);
     onUpdateData(updatedData);
   };
 
@@ -204,6 +180,7 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
         notifications: updatedNotifications,
       };
       saveAppData(updatedData, true);
+      cloudSync.syncState(updatedData);
       onUpdateData(updatedData);
       setDeletingId(null);
     }, 150);
@@ -216,23 +193,13 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
       notifications: [],
     };
     saveAppData(updatedData, true);
+    cloudSync.syncState(updatedData);
     onUpdateData(updatedData);
     setFeedbackNotice('🗑️ All notifications cleared.');
     setTimeout(() => setFeedbackNotice(''), 2000);
   };
 
   const handleNotificationClick = (notif: AppNotification) => {
-    // Mark as read
-    const updatedNotifs = (appData.notifications || []).map((n) =>
-      n.id === notif.id ? { ...n, isRead: true } : n
-    );
-    const updated = {
-      ...appData,
-      notifications: updatedNotifs,
-    };
-    saveAppData(updated, true);
-    onUpdateData(updated);
-
     if (notif.actionTab && onNavigateToTab) {
       onNavigateToTab(notif.actionTab);
       onClose();
@@ -267,21 +234,34 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                   <Bell className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-black text-slate-900">Activity & Alerts (নোটিফিকেশন)</h3>
-                  <p className="text-[10px] text-slate-500 font-medium">Real-time sync notifications</p>
+                  <h3 className="text-xs font-black text-slate-900">Activity & Nudges (নোটিফিকেশন)</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Real-time cloud sync notifications</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowSendNudge(!showSendNudge)}
+                  className={`p-1 px-2.5 text-[10px] font-black rounded-xl transition flex items-center gap-1 cursor-pointer border ${
+                    showSendNudge
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                  }`}
+                  title="Send custom reminder notification to partner"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>Nudge Partner</span>
+                </button>
+
                 {notifications.length > 0 && (
                   <button
                     type="button"
                     onClick={handleClearAllNotifications}
-                    className="p-1 px-2.5 text-[10px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1 cursor-pointer border border-transparent hover:border-rose-100"
+                    className="p-1 px-2 text-[10px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1 cursor-pointer border border-transparent hover:border-rose-100"
                     title="Clear All Notifications"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear All</span>
                   </button>
                 )}
                 <button
@@ -295,7 +275,84 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
               </div>
             </div>
 
-            {/* Mobile Notification & Vibration Permission Card (Allow button) */}
+            {/* SEND PARTNER NUDGE FORM MODULE */}
+            <AnimatePresence>
+              {showSendNudge && (
+                <motion.form
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  onSubmit={handleSendNudgeSubmit}
+                  className="p-3 bg-indigo-50/90 border-b border-indigo-200 space-y-2 shrink-0 overflow-hidden"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-indigo-950 flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Send Instant Reminder to Partner (রিমাইন্ডার পাঠাও)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSendNudge(false)}
+                      className="text-indigo-400 hover:text-indigo-800 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Preset Reminders */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-indigo-700">Quick Presets:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {PRESET_REMINDERS.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPreset(preset);
+                            setCustomNudgeText(preset);
+                          }}
+                          className={`text-[10px] font-semibold px-2 py-1 rounded-lg transition cursor-pointer text-left truncate max-w-full ${
+                            selectedPreset === preset
+                              ? 'bg-indigo-600 text-white font-bold'
+                              : 'bg-white text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Message Text */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <input
+                      type="text"
+                      value={customNudgeText}
+                      onChange={(e) => {
+                        setCustomNudgeText(e.target.value);
+                        setSelectedPreset('');
+                      }}
+                      placeholder="Or type custom reminder message..."
+                      className="flex-1 bg-white border border-indigo-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!customNudgeText.trim() && !selectedPreset}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition cursor-pointer shadow-xs ${
+                        customNudgeText.trim() || selectedPreset
+                          ? 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95'
+                          : 'bg-indigo-200 text-indigo-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>Send</span>
+                    </button>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
+            {/* Mobile Notification & Vibration Permission Banner */}
             {!isAllowed ? (
               <div className="p-3 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border-b border-indigo-100 flex items-center justify-between gap-2 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
@@ -390,7 +447,7 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                 </div>
               )}
 
-              {/* 2. Real-Time Activity & Schedule Notifications */}
+              {/* 2. Real-Time Activity & Nudge Notifications */}
               {notifications.length > 0 ? (
                 <div className="space-y-2">
                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block px-1">
@@ -398,9 +455,8 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                   </span>
 
                   {notifications.map((notif) => {
-                    const isMeeting = notif.type === 'meeting';
-                    const isSchedule = notif.type === 'schedule';
-                    const isClient = notif.type === 'client';
+                    const isReminder = notif.type === 'reminder';
+                    const isPartner = notif.type === 'partner';
                     const isDeleting = deletingId === notif.id;
 
                     return (
@@ -411,22 +467,26 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                         transition={{ duration: 0.15 }}
                         onClick={() => handleNotificationClick(notif)}
                         className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-1.5 relative group ${
-                          isMeeting
-                            ? 'bg-purple-50/70 border-purple-200 hover:border-purple-300'
-                            : isSchedule
-                            ? 'bg-orange-50/70 border-orange-200 hover:border-orange-300'
-                            : isClient
-                            ? 'bg-blue-50/70 border-blue-200 hover:border-blue-300'
+                          isReminder
+                            ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 hover:border-indigo-300'
+                            : isPartner
+                            ? 'bg-amber-50/70 border-amber-200 hover:border-amber-300'
                             : 'bg-white border-slate-200/80 hover:border-indigo-300'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <img
-                              src={notif.senderAvatar}
-                              alt={notif.senderName}
-                              className="w-6 h-6 rounded-full object-cover border border-white shadow-2xs shrink-0"
-                            />
+                            {notif.senderAvatar ? (
+                              <img
+                                src={notif.senderAvatar}
+                                alt={notif.senderName}
+                                className="w-6 h-6 rounded-full object-cover border border-white shadow-2xs shrink-0"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+                                🔔
+                              </div>
+                            )}
                             <span className="text-xs font-black text-slate-900 leading-tight truncate">
                               {notif.title}
                             </span>
@@ -436,7 +496,6 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                             <span className="text-[10px] font-mono text-slate-400 font-medium">
                               {notif.timestamp}
                             </span>
-                            {/* Individual Delete / Dismiss Button */}
                             <button
                               type="button"
                               onClick={(e) => handleDeleteNotification(notif.id, e)}
@@ -448,7 +507,7 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                           </div>
                         </div>
 
-                        <p className="text-[11px] text-slate-600 pl-8 leading-relaxed">
+                        <p className="text-[11px] text-slate-700 pl-8 leading-relaxed font-medium">
                           {notif.message}
                         </p>
 
@@ -471,7 +530,7 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
                   </div>
                   <h4 className="text-xs font-bold text-slate-700">No New Notifications</h4>
                   <p className="text-[11px] text-slate-400 max-w-[200px] mx-auto">
-                    When your partner schedules a meeting, sends a message, or logs a client, it appears here in real-time.
+                    When your partner schedules a meeting, sends a reminder, or connects, it appears here in real-time.
                   </p>
                 </div>
               ) : null}
@@ -480,7 +539,7 @@ export const NotificationBellDrawer: React.FC<NotificationBellDrawerProps> = ({
 
             {/* Footer */}
             <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 font-medium px-4">
-              <span>Real-time Live Synced</span>
+              <span>Firebase Cloud Real-Time</span>
               <span className="font-mono font-bold text-slate-700">AIMS.H Workspace</span>
             </div>
           </motion.div>

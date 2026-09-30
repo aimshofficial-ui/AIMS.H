@@ -25,6 +25,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { SharedAppData, UserProfile, AgencySettings } from '../../types';
+import { cloudSync } from '../../utils/cloudSync';
 import { 
   AVATAR_SELECTIONS, 
   saveAppData, 
@@ -250,7 +251,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
     setTimeout(() => setSuccessMsg(''), 2500);
   };
 
-  const handleConnectPartner = (e: React.FormEvent) => {
+  const handleConnectPartner = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -266,46 +267,24 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
       return;
     }
 
-    // Look for matching user in founders
-    const matchedPartner = Object.values(appData.founders).find((f) => f.inviteCode === trimmed);
-    const partnerId = matchedPartner ? matchedPartner.id : `partner_${Date.now()}`;
-
-    const updatedFounders = { ...appData.founders };
-    if (!matchedPartner) {
-      updatedFounders[partnerId] = {
-        id: partnerId,
-        name: 'Co-Founder Partner',
-        username: 'partner',
-        email: '',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-        role: 'Co-Founder',
-        inviteCode: trimmed,
-        bio: 'Connected via real-time invite code.',
-        socials: {},
-        focusAreas: ['Shared Operations'],
-        primaryObjective: 'Build and scale together.',
-      };
+    const res = await cloudSync.sendPartnerInvite(activeUser.id, trimmed);
+    if (res.success) {
+      setSuccessMsg(
+        res.isTargetOnline
+          ? `🎉 Connection request sent to ${res.targetPartnerName || trimmed}! They will see the alert immediately.`
+          : `✅ Invite registered for code ${trimmed}. Once your partner opens the app with this code, you will connect!`
+      );
+      setInputCode('');
+      setTimeout(() => setSuccessMsg(''), 5000);
+    } else {
+      setErrorMsg(res.error || 'Failed to send invite request.');
+      setTimeout(() => setErrorMsg(''), 4000);
     }
-
-    const updatedData: SharedAppData = {
-      ...appData,
-      founders: updatedFounders,
-      partnerConnection: {
-        partnerInviteCode: trimmed,
-        status: 'accepted',
-        pairedUserId: partnerId,
-        pairedAt: new Date().toISOString(),
-      },
-    };
-
-    saveAppData(updatedData, true);
-    onUpdateData(updatedData);
-    setSuccessMsg(`Partner connected! Synced mode is now live.`);
-    setInputCode('');
   };
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     if (!confirm('Are you sure you want to disconnect from your co-founder partner?')) return;
+    await cloudSync.disconnectPartner();
     const updatedData: SharedAppData = {
       ...appData,
       partnerConnection: {
@@ -316,6 +295,8 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
     };
     saveAppData(updatedData, true);
     onUpdateData(updatedData);
+    setSuccessMsg('Partner disconnected cleanly.');
+    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {

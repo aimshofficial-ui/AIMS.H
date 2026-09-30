@@ -218,7 +218,7 @@ export const Header: React.FC<HeaderProps> = ({
               if (onOpenSearch) {
                 onOpenSearch();
               } else if (onSelectTab) {
-                onSelectTab('missions');
+                onSelectTab('search');
               }
             }}
             className="w-9 h-9 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-blue-600 flex items-center justify-center transition shadow-2xs cursor-pointer"
