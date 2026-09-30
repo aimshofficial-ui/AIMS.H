@@ -11,6 +11,36 @@ function sanitizeForFirestore<T>(obj: T): T {
   );
 }
 
+// Safely merge array items by unique ID so newly created items are never lost on snapshot updates
+function mergeArraysById<T extends { id: string }>(localArr: T[] = [], cloudArr: T[] = []): T[] {
+  const map = new Map<string, T>();
+  
+  // Cloud items first
+  if (Array.isArray(cloudArr)) {
+    cloudArr.forEach((item) => {
+      if (item && item.id) {
+        map.set(item.id, item);
+      }
+    });
+  }
+
+  // Local items override or extend cloud items
+  if (Array.isArray(localArr)) {
+    localArr.forEach((item) => {
+      if (item && item.id) {
+        if (!map.has(item.id)) {
+          map.set(item.id, item);
+        } else {
+          // Keep local if newer or merged
+          map.set(item.id, { ...map.get(item.id)!, ...item });
+        }
+      }
+    });
+  }
+
+  return Array.from(map.values());
+}
+
 class CloudSyncManager {
   private eventSource: EventSource | null = null;
   private listeners: Set<SyncCallback> = new Set();
@@ -60,6 +90,16 @@ class CloudSyncManager {
               ...(cloudData.partnerConnections || {}),
               ...(currentLocal.partnerConnections || {}),
             },
+            skills: mergeArraysById(currentLocal.skills || [], cloudData.skills || []),
+            missions: mergeArraysById(currentLocal.missions || [], cloudData.missions || []),
+            folders: mergeArraysById(currentLocal.folders || [], cloudData.folders || []),
+            resources: mergeArraysById(currentLocal.resources || [], cloudData.resources || []),
+            habits: mergeArraysById(currentLocal.habits || [], cloudData.habits || []),
+            meetings: mergeArraysById(currentLocal.meetings || [], cloudData.meetings || []),
+            clients: mergeArraysById(currentLocal.clients || [], cloudData.clients || []),
+            messages: mergeArraysById(currentLocal.messages || [], cloudData.messages || []),
+            partnerRequests: mergeArraysById(currentLocal.partnerRequests || [], cloudData.partnerRequests || []),
+            notifications: mergeArraysById(currentLocal.notifications || [], cloudData.notifications || []),
           };
 
           const merged = cleanAppData(mergedRaw);
@@ -94,6 +134,16 @@ class CloudSyncManager {
             const mergedRaw: SharedAppData = {
               ...serverData,
               activeFounderId: currentLocal.activeFounderId || serverData.activeFounderId || '',
+              skills: mergeArraysById(currentLocal.skills || [], serverData.skills || []),
+              missions: mergeArraysById(currentLocal.missions || [], serverData.missions || []),
+              folders: mergeArraysById(currentLocal.folders || [], serverData.folders || []),
+              resources: mergeArraysById(currentLocal.resources || [], serverData.resources || []),
+              habits: mergeArraysById(currentLocal.habits || [], serverData.habits || []),
+              meetings: mergeArraysById(currentLocal.meetings || [], serverData.meetings || []),
+              clients: mergeArraysById(currentLocal.clients || [], serverData.clients || []),
+              messages: mergeArraysById(currentLocal.messages || [], serverData.messages || []),
+              partnerRequests: mergeArraysById(currentLocal.partnerRequests || [], serverData.partnerRequests || []),
+              notifications: mergeArraysById(currentLocal.notifications || [], serverData.notifications || []),
             };
 
             const merged = cleanAppData(mergedRaw);

@@ -208,7 +208,8 @@ export const SkillMatrix: React.FC<SkillMatrixProps> = ({ appData, onUpdateData 
       ...appData,
       skills: [newSkill, ...appData.skills],
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
+    cloudSync.syncState(updated);
     onUpdateData(updated);
 
     setTitle('');

@@ -116,6 +116,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
 
   // Edit fields
   const [editName, setEditName] = useState(activeUser.name);
+  const [editEmail, setEditEmail] = useState(activeUser.email || '');
   const [editRole, setEditRole] = useState(activeUser.role);
   const [editBio, setEditBio] = useState(activeUser.bio);
 
@@ -294,6 +295,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
     const updatedProfile: UserProfile = {
       ...activeUser,
       name: editName.trim() || activeUser.name,
+      email: editEmail.trim() || activeUser.email,
       role: editRole.trim() || activeUser.role,
       bio: editBio.trim(),
     };
@@ -307,9 +309,10 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
     };
 
     saveAppData(updatedData, true);
+    cloudSync.registerUser(updatedProfile);
     onUpdateData(updatedData);
     setIsEditingProfile(false);
-    setSuccessMsg('Profile details saved!');
+    setSuccessMsg('Profile & Email saved! Instant meeting notifications enabled.');
     setTimeout(() => setSuccessMsg(''), 3000);
   };
 
@@ -633,6 +636,16 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
                   onChange={(e) => setEditName(e.target.value)}
                   className="w-full px-3 py-2 text-xs app-input"
                   required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address (For Direct Invites)</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="e.g. partner@gmail.com"
+                  className="w-full px-3 py-2 text-xs app-input font-medium"
                 />
               </div>
               <div>

@@ -23,6 +23,7 @@ import { GlobalSearchIntelligenceHub } from './components/Search/GlobalSearchInt
 import { OpeningAnimationModal } from './components/Splash/OpeningAnimationModal';
 import { CleanLightOnboarding } from './components/Auth/CleanLightOnboarding';
 import { PWAGuideModal } from './components/PWAGuideModal';
+import { AppInstallFloatingBanner } from './components/AppInstallFloatingBanner';
 import { MeetingHub } from './components/Meetings/MeetingHub';
 import { AgencyClientsHub } from './components/Clients/AgencyClientsHub';
 import { SharedAppData } from './types';
@@ -221,6 +222,9 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* 1-Click PWA App Download Floating Banner */}
+      <AppInstallFloatingBanner onOpenPWAGuide={() => setIsPWAGuideOpen(true)} />
 
       {/* Bottom Floating Circular Navigation Dock */}
       <BottomNavBar
