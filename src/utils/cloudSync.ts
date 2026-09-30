@@ -80,13 +80,16 @@ class CloudSyncManager {
           const currentLocal = loadAppData();
 
           const mergedRaw: SharedAppData = {
+            ...currentLocal,
             ...cloudData,
             activeFounderId: currentLocal.activeFounderId || cloudData.activeFounderId || '',
             founders: {
               ...(cloudData.founders || {}),
               ...(currentLocal.founders || {}),
             },
-            partnerConnections: cloudData.partnerConnections || {},
+            partnerConnections: currentLocal.partnerConnections || {},
+            partnerRequests: currentLocal.partnerRequests || [],
+            messages: currentLocal.messages || [],
             skills: mergeArraysById(currentLocal.skills || [], cloudData.skills || []),
             missions: mergeArraysById(currentLocal.missions || [], cloudData.missions || []),
             folders: mergeArraysById(currentLocal.folders || [], cloudData.folders || []),
@@ -94,8 +97,6 @@ class CloudSyncManager {
             habits: mergeArraysById(currentLocal.habits || [], cloudData.habits || []),
             meetings: mergeArraysById(currentLocal.meetings || [], cloudData.meetings || []),
             clients: mergeArraysById(currentLocal.clients || [], cloudData.clients || []),
-            messages: mergeArraysById(currentLocal.messages || [], cloudData.messages || []),
-            partnerRequests: cloudData.partnerRequests || [],
             notifications: mergeArraysById(currentLocal.notifications || [], cloudData.notifications || []),
             mediaVideos: mergeArraysById(currentLocal.mediaVideos || [], cloudData.mediaVideos || []),
           };
@@ -645,14 +646,23 @@ class CloudSyncManager {
       await deleteDoc(doc(db, 'partner_connections', currentUserId)).catch(() => {});
       await deleteDoc(doc(db, 'partner_connections', partnerId)).catch(() => {});
 
-      // Delete corresponding pending request documents if any exist
+      // Delete corresponding pending/accepted request documents if any exist
       try {
-        const qRequestSearch = query(
+        const qRequestSearch1 = query(
           collection(db, 'partner_requests'),
           where('fromUserId', '==', currentUserId)
         );
-        const requestSnaps = await getDocs(qRequestSearch);
-        requestSnaps.forEach((docSnap) => {
+        const snaps1 = await getDocs(qRequestSearch1);
+        snaps1.forEach((docSnap) => {
+          deleteDoc(doc(db, 'partner_requests', docSnap.id)).catch(() => {});
+        });
+
+        const qRequestSearch2 = query(
+          collection(db, 'partner_requests'),
+          where('fromInviteCode', '==', currentData.founders[partnerId]?.inviteCode || '')
+        );
+        const snaps2 = await getDocs(qRequestSearch2);
+        snaps2.forEach((docSnap) => {
           deleteDoc(doc(db, 'partner_requests', docSnap.id)).catch(() => {});
         });
       } catch (err) {
@@ -678,6 +688,14 @@ class CloudSyncManager {
       const cleaned = cleanAppData(data);
       saveAppData(cleaned, false);
       const cleanData = sanitizeForFirestore(cleaned);
+      
+      // Strip out decoupled collections to avoid conflicts and size limits!
+      const anyData = cleanData as any;
+      delete anyData.partnerConnection;
+      delete anyData.partnerConnections;
+      delete anyData.partnerRequests;
+      delete anyData.messages;
+
       const docRef = doc(db, 'workspace', 'shared_state');
       await setDoc(docRef, cleanData);
 
