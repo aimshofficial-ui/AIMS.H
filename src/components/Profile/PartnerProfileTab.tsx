@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -19,10 +19,20 @@ import {
   Sparkles,
   Link,
   ChevronRight,
-  UserPlus
+  UserPlus,
+  Building2,
+  Upload,
+  Trash2
 } from 'lucide-react';
-import { SharedAppData, UserProfile } from '../../types';
-import { AVATAR_SELECTIONS, saveAppData, resetToFreshData, exportAppDataJson } from '../../utils/storage';
+import { SharedAppData, UserProfile, AgencySettings } from '../../types';
+import { 
+  AVATAR_SELECTIONS, 
+  saveAppData, 
+  resetToFreshData, 
+  exportAppDataJson, 
+  downloadOneTimeBackup, 
+  importAppDataJson 
+} from '../../utils/storage';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 interface PartnerProfileTabProps {
@@ -30,6 +40,35 @@ interface PartnerProfileTabProps {
   onUpdateData: (data: SharedAppData) => void;
   onOpenPWAGuide: () => void;
 }
+
+// Preset modern 3D agency logos / emblems
+const PRESET_AGENCY_LOGOS = [
+  {
+    id: 'emblem-1',
+    label: 'Apex Neon Orbit',
+    url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
+  },
+  {
+    id: 'emblem-2',
+    label: 'Cyber Violet Core',
+    url: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?auto=format&fit=crop&w=200&q=80',
+  },
+  {
+    id: 'emblem-3',
+    label: 'Prism Geometry',
+    url: 'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?auto=format&fit=crop&w=200&q=80',
+  },
+  {
+    id: 'emblem-4',
+    label: 'Sunset Minimalist',
+    url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=200&q=80',
+  },
+  {
+    id: 'emblem-5',
+    label: 'Studio Black & Silver',
+    url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=200&q=80',
+  },
+];
 
 export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
   appData,
@@ -67,6 +106,13 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
   const [customAvatarInput, setCustomAvatarInput] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
 
+  // Agency Branding State
+  const [agencyName, setAgencyName] = useState(appData.agencySettings?.agencyName || 'AIMS.H Workspace');
+  const [agencyTagline, setAgencyTagline] = useState(appData.agencySettings?.agencyTagline || 'Co-Founder Digital Growth Agency');
+  const [customLogoUrl, setCustomLogoUrl] = useState(appData.agencySettings?.agencyLogoUrl || '');
+  const [isEditingAgency, setIsEditingAgency] = useState(false);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+
   // Edit fields
   const [editName, setEditName] = useState(activeUser.name);
   const [editRole, setEditRole] = useState(activeUser.role);
@@ -100,7 +146,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
         [activeUser.id]: updatedProfile,
       },
     };
-    saveAppData(updatedData);
+    saveAppData(updatedData, true);
     onUpdateData(updatedData);
     setSuccessMsg('Avatar updated instantly!');
     setTimeout(() => setSuccessMsg(''), 3000);
@@ -112,6 +158,96 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
     handleSelectAvatar(customAvatarInput.trim());
     setCustomAvatarInput('');
     setShowCustomInput(false);
+  };
+
+  // Agency Logo File Upload (reads to base64 Data URL)
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit (max 3MB)
+    if (file.size > 3 * 1024 * 1024) {
+      setErrorMsg('Image size should be under 3MB.');
+      setTimeout(() => setErrorMsg(''), 4000);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const base64Data = uploadEvent.target?.result as string;
+      if (base64Data) {
+        setCustomLogoUrl(base64Data);
+        const updatedAgency: AgencySettings = {
+          agencyName: agencyName.trim() || 'AIMS.H Workspace',
+          agencyTagline: agencyTagline.trim(),
+          agencyLogoUrl: base64Data,
+        };
+        const updatedData: SharedAppData = {
+          ...appData,
+          agencySettings: updatedAgency,
+        };
+        saveAppData(updatedData, true);
+        onUpdateData(updatedData);
+        setSuccessMsg('🎉 Agency Logo uploaded and applied across entire app!');
+        setTimeout(() => setSuccessMsg(''), 3500);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Apply preset emblem
+  const handleSelectPresetLogo = (logoUrl: string) => {
+    setCustomLogoUrl(logoUrl);
+    const updatedAgency: AgencySettings = {
+      agencyName: agencyName.trim() || 'AIMS.H Workspace',
+      agencyTagline: agencyTagline.trim(),
+      agencyLogoUrl: logoUrl,
+    };
+    const updatedData: SharedAppData = {
+      ...appData,
+      agencySettings: updatedAgency,
+    };
+    saveAppData(updatedData, true);
+    onUpdateData(updatedData);
+    setSuccessMsg('Agency Logo updated!');
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  // Save Agency Branding Form
+  const handleSaveAgencyBranding = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedAgency: AgencySettings = {
+      agencyName: agencyName.trim() || 'AIMS.H Workspace',
+      agencyTagline: agencyTagline.trim(),
+      agencyLogoUrl: customLogoUrl.trim(),
+    };
+    const updatedData: SharedAppData = {
+      ...appData,
+      agencySettings: updatedAgency,
+    };
+    saveAppData(updatedData, true);
+    onUpdateData(updatedData);
+    setIsEditingAgency(false);
+    setSuccessMsg('Agency Brand settings saved!');
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  // Remove Agency Logo
+  const handleRemoveLogo = () => {
+    setCustomLogoUrl('');
+    const updatedAgency: AgencySettings = {
+      agencyName: agencyName.trim() || 'AIMS.H Workspace',
+      agencyTagline: agencyTagline.trim(),
+      agencyLogoUrl: '',
+    };
+    const updatedData: SharedAppData = {
+      ...appData,
+      agencySettings: updatedAgency,
+    };
+    saveAppData(updatedData, true);
+    onUpdateData(updatedData);
+    setSuccessMsg('Agency logo removed.');
+    setTimeout(() => setSuccessMsg(''), 2500);
   };
 
   const handleConnectPartner = (e: React.FormEvent) => {
@@ -162,13 +298,14 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
       },
     };
 
-    saveAppData(updatedData);
+    saveAppData(updatedData, true);
     onUpdateData(updatedData);
     setSuccessMsg(`Partner connected! Synced mode is now live.`);
     setInputCode('');
   };
 
   const handleDisconnect = () => {
+    if (!confirm('Are you sure you want to disconnect from your co-founder partner?')) return;
     const updatedData: SharedAppData = {
       ...appData,
       partnerConnection: {
@@ -177,7 +314,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
         pairedUserId: '',
       },
     };
-    saveAppData(updatedData);
+    saveAppData(updatedData, true);
     onUpdateData(updatedData);
   };
 
@@ -198,22 +335,11 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
       },
     };
 
-    saveAppData(updatedData);
+    saveAppData(updatedData, true);
     onUpdateData(updatedData);
     setIsEditingProfile(false);
     setSuccessMsg('Profile details saved!');
     setTimeout(() => setSuccessMsg(''), 3000);
-  };
-
-  const handleSwitchSeat = (targetId: string) => {
-    localStorage.setItem('aimsh_active_founder_id', targetId);
-    localStorage.removeItem('aimsh_logged_out');
-    const updated = {
-      ...appData,
-      activeFounderId: targetId,
-    };
-    saveAppData(updated);
-    onUpdateData(updated);
   };
 
   const handleLogOut = () => {
@@ -223,17 +349,18 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
       ...appData,
       activeFounderId: '',
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
     onUpdateData(updated);
   };
 
   const handleResetApp = () => {
+    if (!confirm('Are you sure you want to reset everything to fresh state?')) return;
     const fresh = resetToFreshData();
     onUpdateData(fresh);
   };
 
   return (
-    <div className="space-y-5 pb-12">
+    <div className="space-y-5 pb-16 font-sans">
       
       {/* Toast Notice */}
       <AnimatePresence>
@@ -248,15 +375,214 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               {successMsg}
             </span>
-            <button onClick={() => setSuccessMsg('')} className="text-emerald-500 hover:text-emerald-700 font-bold text-xs">
+            <button onClick={() => setSuccessMsg('')} className="text-emerald-500 hover:text-emerald-700 font-bold text-xs cursor-pointer">
               ✕
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Active Founder Profile Card */}
-      <div className="app-card p-5 sm:p-6 space-y-4 bg-linear-to-br from-white via-white to-indigo-50/20 border-indigo-100">
+      {/* 1. AGENCY BRANDING & LOGO CUSTOMIZER (লোগো পরিবর্তন ও ব্র্যান্ডিং) */}
+      <div className="app-card p-5 sm:p-6 space-y-4 bg-gradient-to-br from-white via-indigo-50/20 to-purple-50/30 border-indigo-200 shadow-md">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+              <Building2 className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
+                  Agency Logo & Branding / এজেন্সির লোগো
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold">
+                  Live Customizer
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Upload your agency logo or choose an emblem. It displays in the top header and syncs with your partner.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsEditingAgency(!isEditingAgency)}
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs self-start sm:self-auto"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>{isEditingAgency ? 'Close Editor' : 'Edit Brand Name'}</span>
+          </button>
+        </div>
+
+        {/* Logo Preview & Upload Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+          {/* Left: Active Logo Display */}
+          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 flex items-center gap-3 shadow-2xs">
+            <div className="relative w-16 h-16 rounded-2xl bg-slate-100 border-2 border-indigo-200 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+              {customLogoUrl ? (
+                <img
+                  src={customLogoUrl}
+                  alt="Agency Logo"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Building2 className="w-8 h-8 text-slate-400 stroke-1" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-black text-slate-900 truncate">
+                {agencyName}
+              </p>
+              <p className="text-[10px] text-slate-500 truncate">
+                {agencyTagline || 'Workspace Active'}
+              </p>
+              {customLogoUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveLogo}
+                  className="text-[10px] text-rose-600 hover:text-rose-800 font-bold mt-1 flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Remove Logo</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Center: File Upload from Phone / PC */}
+          <div className="sm:col-span-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <input
+              type="file"
+              ref={logoFileInputRef}
+              accept="image/png, image/jpeg, image/webp, image/svg+xml"
+              onChange={handleLogoFileUpload}
+              className="hidden"
+            />
+            
+            <button
+              type="button"
+              onClick={() => logoFileInputRef.current?.click()}
+              className="flex-1 px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-slate-900/10 transition cursor-pointer active:scale-95"
+            >
+              <Upload className="w-4 h-4 text-emerald-400" />
+              <span>📁 Upload Logo from Device (ফোন/পিসি থেকে আপলোড)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCustomInput(!showCustomInput)}
+              className="px-3.5 py-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+            >
+              <Link className="w-3.5 h-3.5 text-blue-600" />
+              <span>Paste URL</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Direct URL Input if opened */}
+        {showCustomInput && (
+          <form onSubmit={handleSaveAgencyBranding} className="p-3 bg-white rounded-2xl border border-slate-200 space-y-2">
+            <label className="block text-[11px] font-bold text-slate-700">
+              Paste Direct Image URL:
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="url"
+                value={customLogoUrl}
+                onChange={(e) => setCustomLogoUrl(e.target.value)}
+                placeholder="https://example.com/logo.png"
+                className="flex-1 px-3 py-2 text-xs app-input"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+              >
+                Apply Logo URL
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Agency Presets */}
+        <div className="space-y-2 pt-1">
+          <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+            Or Pick a Ready 3D Agency Emblem
+          </span>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {PRESET_AGENCY_LOGOS.map((emblem) => (
+              <button
+                key={emblem.id}
+                type="button"
+                onClick={() => handleSelectPresetLogo(emblem.url)}
+                className={`p-2 rounded-xl border flex items-center gap-2 transition cursor-pointer ${
+                  customLogoUrl === emblem.url
+                    ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600'
+                    : 'border-slate-200 bg-white hover:border-indigo-300'
+                }`}
+              >
+                <img
+                  src={emblem.url}
+                  alt={emblem.label}
+                  className="w-8 h-8 rounded-lg object-cover shadow-2xs"
+                />
+                <span className="text-[11px] font-bold text-slate-800 line-clamp-1 text-left">
+                  {emblem.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Agency Name & Tagline Edit Form */}
+        {isEditingAgency && (
+          <form onSubmit={handleSaveAgencyBranding} className="pt-3 border-t border-indigo-100 space-y-3 bg-white/80 p-4 rounded-2xl">
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+              Agency Name & Subtitle
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Agency Name</label>
+                <input
+                  type="text"
+                  value={agencyName}
+                  onChange={(e) => setAgencyName(e.target.value)}
+                  placeholder="e.g. AIMS.H Agency, Velocity Digital"
+                  className="w-full px-3 py-2 text-xs app-input font-bold"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Agency Tagline</label>
+                <input
+                  type="text"
+                  value={agencyTagline}
+                  onChange={(e) => setAgencyTagline(e.target.value)}
+                  placeholder="e.g. Full-Stack Scaling & Client Growth"
+                  className="w-full px-3 py-2 text-xs app-input"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditingAgency(false)}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 text-xs font-bold text-slate-600 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-black cursor-pointer shadow-xs"
+              >
+                Save Branding
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* 2. ACTIVE FOUNDER PROFILE CARD */}
+      <div className="app-card p-5 sm:p-6 space-y-4 bg-gradient-to-br from-white via-white to-indigo-50/20 border-indigo-100">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="relative group">
@@ -286,7 +612,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
                 </span>
                 <button
                   onClick={handleCopyCode}
-                  className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1"
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 cursor-pointer"
                 >
                   {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedCode ? 'Copied' : 'Copy'}</span>
@@ -377,7 +703,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
         )}
       </div>
 
-      {/* DEDICATED AVATAR SELECTOR (Boy & Girl Avatar Presets) */}
+      {/* 3. DEDICATED AVATAR SELECTOR (Boy & Girl Avatar Presets) */}
       <div className="app-card p-5 sm:p-6 space-y-4 border-indigo-100">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
@@ -398,6 +724,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
           {/* Gender Filter Buttons */}
           <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl self-start sm:self-auto border border-slate-200/80">
             <button
+              type="button"
               onClick={() => setAvatarGender('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 avatarGender === 'all'
@@ -408,6 +735,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
               All ({AVATAR_SELECTIONS.length})
             </button>
             <button
+              type="button"
               onClick={() => setAvatarGender('male')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                 avatarGender === 'male'
@@ -421,6 +749,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
               </span>
             </button>
             <button
+              type="button"
               onClick={() => setAvatarGender('female')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
                 avatarGender === 'female'
@@ -513,7 +842,7 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
         </div>
       </div>
 
-      {/* Co-Founder Partner Status & Pairing Card */}
+      {/* 4. CO-FOUNDER PARTNER STATUS & PAIRING CARD */}
       <div className="app-card p-5 sm:p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
@@ -597,76 +926,93 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
         )}
       </div>
 
-      {/* Personal Workstyle & Habits Summary */}
-      <div className="app-card p-5 space-y-3 border-slate-200">
-        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4 text-amber-500" />
-          My Personal Workstyle, Habits & Screentime
-        </h4>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-          {/* Hobbies */}
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Hobbies & Interests
-            </span>
-            <div className="flex flex-wrap gap-1">
-              {activeUser.hobbies && activeUser.hobbies.length > 0 ? (
-                activeUser.hobbies.map((h, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-semibold border border-indigo-100">
-                    {h}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-slate-400 italic">Not set yet</span>
-              )}
-            </div>
+      {/* 5. APP CONTROLS, ONE-TIME BACKUP & ACCOUNT ACTIONS */}
+      <div className="app-card p-5 sm:p-6 space-y-4 bg-white border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4 text-indigo-600" />
+            <h4 className="text-sm font-black text-slate-900 tracking-tight">
+              One-Time Download & Database Backup / ডাটাবেজ ব্যাকআপ ও ডাউনলোড
+            </h4>
           </div>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+            Encrypted JSON
+          </span>
+        </div>
 
-          {/* Habits */}
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Daily Habits
-            </span>
-            <div className="flex flex-wrap gap-1">
-              {activeUser.habitStyles && activeUser.habitStyles.length > 0 ? (
-                activeUser.habitStyles.map((hb, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 text-[11px] font-semibold border border-amber-100">
-                    {hb}
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-slate-400 italic">Not set yet</span>
-              )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Download One-Time Backup */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/70 to-purple-50/50 border border-indigo-200 space-y-2">
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-indigo-600" />
+              <h5 className="text-xs font-black text-slate-900">One-Time Instant Download</h5>
             </div>
-          </div>
-
-          {/* Screen Time */}
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Mobile Screentime Target
-            </span>
-            <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
-              <span>{activeUser.screenTimeHours || '3-4 Hours'}</span>
+            <p className="text-[11px] text-slate-600">
+              Download your full workspace: clients, missions, chat history, meetings, and agency settings in 1 secure file.
             </p>
-            <p className="text-[10px] text-slate-400">Personalized focus boundary</p>
+            <button
+              type="button"
+              onClick={() => {
+                const res = downloadOneTimeBackup(appData);
+                if (res.success) {
+                  setSuccessMsg(`✅ One-time backup downloaded: ${res.filename}`);
+                  setTimeout(() => setSuccessMsg(''), 4000);
+                }
+              }}
+              className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/15 cursor-pointer transition active:scale-95"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download All Data (ডাউনলোড করুন)</span>
+            </button>
+          </div>
+
+          {/* Restore / Import Backup */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-slate-700" />
+              <h5 className="text-xs font-black text-slate-900">Restore from Backup</h5>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Import a previously downloaded backup JSON file to restore your entire agency workspace instantly.
+            </p>
+            <label className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition">
+              <Upload className="w-3.5 h-3.5 text-slate-500" />
+              <span>Select Backup File (.json)</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const text = event.target?.result as string;
+                    if (text) {
+                      const res = importAppDataJson(text);
+                      if (res.success && res.data) {
+                        onUpdateData(res.data);
+                        setSuccessMsg('✅ Backup restored successfully!');
+                        setTimeout(() => setSuccessMsg(''), 4000);
+                      } else {
+                        setErrorMsg(res.error || 'Failed to parse backup file.');
+                        setTimeout(() => setErrorMsg(''), 4000);
+                      }
+                    }
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+            </label>
           </div>
         </div>
-      </div>
 
-      {/* App Controls, PWA, Backup & Reliable Logout */}
-      <div className="app-card p-5 space-y-3">
-        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-          System & Account Actions
-        </h4>
-
-        <div className="space-y-2">
+        <div className="space-y-2 pt-2 border-t border-slate-100">
           {/* PWA Install Button */}
           {isInstallable && (
             <button
               onClick={install}
-              className="w-full p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold text-xs flex items-center justify-between hover:bg-indigo-100 transition cursor-pointer"
+              className="w-full p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-xs flex items-center justify-between hover:bg-emerald-100 transition cursor-pointer"
             >
               <span className="flex items-center gap-2">
                 <Smartphone className="w-4 h-4" /> Install App to Home Screen / Dock
@@ -680,19 +1026,9 @@ export const PartnerProfileTab: React.FC<PartnerProfileTabProps> = ({
             className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium flex items-center justify-between transition cursor-pointer"
           >
             <span className="flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-slate-500" /> PWA Installation & Export Guide
+              <Smartphone className="w-4 h-4 text-slate-500" /> PWA Mobile Installation Guide
             </span>
             <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-
-          <button
-            onClick={() => exportAppDataJson(appData)}
-            className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium flex items-center justify-between transition cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Download className="w-4 h-4 text-slate-500" /> Export Hub Backup (JSON)
-            </span>
-            <span className="text-[11px] text-slate-400 font-mono">Download</span>
           </button>
 
           <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">

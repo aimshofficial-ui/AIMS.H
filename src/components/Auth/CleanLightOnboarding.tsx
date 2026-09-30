@@ -26,7 +26,11 @@ import {
   Droplet, 
   CheckCircle2,
   KeyRound,
-  LogIn
+  LogIn,
+  User,
+  ShieldAlert,
+  HelpCircle,
+  X
 } from 'lucide-react';
 import { SharedAppData, UserProfile } from '../../types';
 import { AVATAR_SELECTIONS, generateInviteCode, saveAppData } from '../../utils/storage';
@@ -36,9 +40,114 @@ interface CleanLightOnboardingProps {
   onUpdateData: (data: SharedAppData) => void;
 }
 
+// 1. Cute Modern Security Mascot & Blue Padlock Vector Illustration
+const SecurityMascotIllustration: React.FC<{ className?: string }> = ({ className = 'w-24 h-24' }) => {
+  return (
+    <svg className={`${className} select-none drop-shadow-md`} viewBox="0 0 160 160" fill="none">
+      <defs>
+        <radialGradient id="secPadlockGrad" cx="30%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#93C5FD" />
+          <stop offset="50%" stopColor="#3B82F6" />
+          <stop offset="100%" stopColor="#1D4ED8" />
+        </radialGradient>
+        <radialGradient id="secMascotFace" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="60%" stopColor="#F8FAFC" />
+          <stop offset="100%" stopColor="#E2E8F0" />
+        </radialGradient>
+        <linearGradient id="secKeyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FCD34D" />
+          <stop offset="100%" stopColor="#F59E0B" />
+        </linearGradient>
+        <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#3B82F6" floodOpacity="0.25" />
+        </filter>
+      </defs>
+
+      {/* Ambient background glow ring */}
+      <circle cx="80" cy="80" r="70" fill="#EFF6FF" />
+      <circle cx="80" cy="80" r="56" fill="#DBEAFE" opacity="0.6" />
+
+      {/* Blue Padlock Body */}
+      <rect x="76" y="70" width="60" height="52" rx="16" fill="url(#secPadlockGrad)" filter="url(#softGlow)" />
+      {/* Padlock Shackle */}
+      <path d="M88 70 V52 C88 42 124 42 124 52 V70" stroke="#60A5FA" strokeWidth="8" strokeLinecap="round" />
+      {/* Keyhole */}
+      <circle cx="106" cy="92" r="5" fill="#1E3A8A" />
+      <path d="M104 94 L103 105 H109 L108 94 Z" fill="#1E3A8A" />
+
+      {/* Cute Mascot Character */}
+      {/* Body / Head */}
+      <circle cx="56" cy="78" r="32" fill="url(#secMascotFace)" stroke="#CBD5E1" strokeWidth="3" filter="url(#softGlow)" />
+      {/* Friendly Eyes */}
+      <circle cx="48" cy="74" r="3.5" fill="#0F172A" />
+      <circle cx="64" cy="74" r="3.5" fill="#0F172A" />
+      {/* Eye Sparkles */}
+      <circle cx="49" cy="73" r="1.2" fill="#FFFFFF" />
+      <circle cx="65" cy="73" r="1.2" fill="#FFFFFF" />
+      {/* Rosy Cheeks */}
+      <ellipse cx="44" cy="82" rx="3.5" ry="2" fill="#F472B6" opacity="0.7" />
+      <ellipse cx="68" cy="82" rx="3.5" ry="2" fill="#F472B6" opacity="0.7" />
+      {/* Smiling Mouth */}
+      <path d="M52 82 Q56 87 60 82" stroke="#0F172A" strokeWidth="2.5" strokeLinecap="round" />
+
+      {/* Mascot Little Hand holding Golden Key */}
+      <circle cx="34" cy="94" r="8" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="2.5" />
+      {/* Golden Key */}
+      <g transform="translate(18, 86) rotate(-25)">
+        <circle cx="12" cy="12" r="7" stroke="url(#secKeyGrad)" strokeWidth="3.5" fill="none" />
+        <rect x="18" y="10" width="22" height="4" rx="2" fill="url(#secKeyGrad)" />
+        <rect x="32" y="14" width="4" height="6" rx="1.5" fill="url(#secKeyGrad)" />
+        <rect x="26" y="14" width="3" height="4" rx="1" fill="url(#secKeyGrad)" />
+      </g>
+
+      {/* Sparkles */}
+      <path d="M138 34 L140 40 L146 42 L140 44 L138 50 L136 44 L130 42 L136 40 Z" fill="#F59E0B" />
+      <path d="M26 44 L27 48 L31 49 L27 50 L26 54 L25 50 L21 49 L25 48 Z" fill="#60A5FA" />
+    </svg>
+  );
+};
+
+// 2. Success Badge Illustration (OK Hand Gesture & Green Checkmark Starburst)
+const SuccessBadgeIllustration: React.FC<{ className?: string }> = ({ className = 'w-24 h-24' }) => {
+  return (
+    <svg className={`${className} select-none drop-shadow-lg`} viewBox="0 0 140 140" fill="none">
+      <defs>
+        <radialGradient id="successGrad" cx="30%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#BBF7D0" />
+          <stop offset="60%" stopColor="#22C55E" />
+          <stop offset="100%" stopColor="#15803D" />
+        </radialGradient>
+      </defs>
+
+      {/* Outer Starburst / Radial Aura */}
+      <circle cx="70" cy="70" r="62" fill="#F0FDF4" />
+      <circle cx="70" cy="70" r="50" fill="#DCFCE7" />
+
+      {/* Green Starburst Badge */}
+      <circle cx="70" cy="70" r="38" fill="url(#successGrad)" />
+
+      {/* Crisp White Checkmark & OK Symbol */}
+      <path
+        d="M54 71 L65 82 L88 56"
+        stroke="#FFFFFF"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* Little Starburst accents */}
+      <circle cx="34" cy="38" r="3" fill="#22C55E" />
+      <circle cx="108" cy="42" r="3.5" fill="#3B82F6" />
+      <circle cx="104" cy="98" r="2.5" fill="#F59E0B" />
+      <circle cx="38" cy="96" r="3" fill="#A855F7" />
+    </svg>
+  );
+};
+
 const HOBBY_OPTIONS = [
   { id: 'video_editing', label: 'Video Editing & Reels', icon: Film, color: 'text-rose-600 bg-rose-50 border-rose-200' },
-  { id: 'coding', label: 'Coding & Development', icon: Code, color: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
+  { id: 'coding', label: 'Coding & Development', icon: Code, color: 'text-blue-600 bg-blue-50 border-blue-200' },
   { id: 'gym', label: 'Gym & Fitness Training', icon: Dumbbell, color: 'text-amber-600 bg-amber-50 border-amber-200' },
   { id: 'reading', label: 'Reading & Knowledge', icon: BookOpen, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   { id: 'gaming', label: 'Gaming & Strategy', icon: Gamepad2, color: 'text-purple-600 bg-purple-50 border-purple-200' },
@@ -68,9 +177,9 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
   appData,
   onUpdateData,
 }) => {
-  const [authMode, setAuthMode] = useState<'create' | 'login'>('create');
+  const [authMode, setAuthMode] = useState<'create' | 'login'>('login');
   
-  // Multi-step Onboarding State
+  // Multi-step Onboarding State for 'create' mode (Sign up)
   const [step, setStep] = useState<number>(1);
   const totalSteps = 5;
 
@@ -100,6 +209,11 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Forgot password & Success Overlay state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [pendingSuccessUser, setPendingSuccessUser] = useState<UserProfile | null>(null);
 
   const filteredAvatars = AVATAR_SELECTIONS.filter((a) => {
     if (avatarGender === 'all') return true;
@@ -148,7 +262,7 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
     }
   };
 
-  // Create new account
+  // Create new account (Sign up)
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -196,7 +310,6 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
       [newId]: newProfile,
     };
 
-    // If partner code provided, pair
     let updatedPartnerConnection = { ...appData.partnerConnection };
     const trimmedPartnerCode = partnerCode.trim().toUpperCase();
     if (trimmedPartnerCode) {
@@ -216,13 +329,12 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
       partnerConnection: updatedPartnerConnection,
     };
 
-    localStorage.setItem('aimsh_active_founder_id', newId);
-    localStorage.removeItem('aimsh_logged_out');
+    setPendingSuccessUser(newProfile);
+    setShowSuccessModal(true);
     saveAppData(updatedData);
-    onUpdateData(updatedData);
   };
 
-  // Secure Private Login (No account listing shown)
+  // Secure Private Login
   const handlePrivateLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -231,7 +343,7 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
     const pass = loginPassword.trim();
 
     if (!query) {
-      setErrorMsg('Please enter your Name or Invite Code.');
+      setErrorMsg('Please enter your Username or Invite Code.');
       return;
     }
 
@@ -243,11 +355,11 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
     );
 
     if (!matched) {
-      setErrorMsg('No account found with this Name or Invite Code. Please check or create a new account.');
+      setErrorMsg('Account not found. Please check your username/invite code or Sign up.');
       return;
     }
 
-    // If account has password, verify it
+    // Verify password if set
     if (matched.password) {
       if (!pass) {
         setErrorMsg('Please enter your password / PIN to unlock your seat.');
@@ -259,116 +371,211 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
       }
     }
 
-    // Successfully authenticate
-    localStorage.setItem('aimsh_active_founder_id', matched.id);
+    setPendingSuccessUser(matched);
+    setShowSuccessModal(true);
+  };
+
+  // Complete success modal and enter workspace
+  const handleCompleteSuccess = () => {
+    if (!pendingSuccessUser) return;
+    localStorage.setItem('aimsh_active_founder_id', pendingSuccessUser.id);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('aimsh_session_user_id', pendingSuccessUser.id);
+    }
     localStorage.removeItem('aimsh_logged_out');
+    
     const updated = {
       ...appData,
-      activeFounderId: matched.id,
+      activeFounderId: pendingSuccessUser.id,
     };
     saveAppData(updated);
     onUpdateData(updated);
+    setShowSuccessModal(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-3 sm:p-5 selection:bg-indigo-500/20 selection:text-indigo-700">
-      <div className="w-full max-w-xl">
+    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-3 sm:p-6 font-sans relative selection:bg-blue-500/20 selection:text-blue-700">
+      
+      {/* Soft Ambient Background Glows */}
+      <div className="absolute top-1/4 left-1/4 w-80 h-80 rounded-full bg-blue-100/50 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-purple-100/50 blur-3xl pointer-events-none" />
+      
+      <div className="w-full max-w-md relative z-10">
         
-        {/* Main Glass Card */}
-        <div className="app-card p-5 sm:p-8 space-y-6 shadow-xl shadow-indigo-900/5">
-          
-          {/* Brand Logo & Switcher */}
+        {/* Main Clean Card (#FFFFFF, rounded-3xl, elevated drop shadow) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 14, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="bg-white rounded-[28px] p-6 sm:p-8 space-y-5 shadow-xl shadow-slate-200/60 border border-slate-100"
+        >
+          {/* Top Header Illustration: Cute modern security vector illustration */}
           <div className="flex flex-col items-center text-center space-y-2">
-            <div className="w-13 h-13 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 mb-1">
-              <Zap className="w-6 h-6" />
-            </div>
+            <SecurityMascotIllustration className="w-24 h-24" />
             
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-                AIMS.H Hub
+            {/* Welcome Header: Clean bold title with friendly wave emoji */}
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {authMode === 'login' ? 'Welcome back 👋' : 'Create Account 🚀'}
               </h1>
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                PRIVATE OS
-              </span>
+              <p className="text-xs text-slate-500 font-medium">
+                {authMode === 'login'
+                  ? 'Access your private co-founder agency workspace'
+                  : 'Start your dedicated co-founder seat & bilateral sync'}
+              </p>
             </div>
-            <p className="text-xs text-slate-500 max-w-sm">
-              Empowering Co-Founders. Tailored Habits. 100% Private & Protected.
-            </p>
 
-            {/* Auth Mode Toggle (Create vs Private Login) */}
-            <div className="w-full max-w-xs flex rounded-xl bg-slate-100 p-1 border border-slate-200/80 text-xs font-bold mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('create');
-                  setErrorMsg('');
-                }}
-                className={`flex-1 py-2 rounded-lg transition cursor-pointer ${
-                  authMode === 'create'
-                    ? 'bg-white text-indigo-700 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                + New Founder Seat
-              </button>
+            {/* Segmented Toggle: Soft gray background toggle bar switching between "Login" and "Sign up" with active white pill-slider */}
+            <div className="w-full max-w-xs flex rounded-full bg-slate-100 p-1 border border-slate-200/70 text-xs font-bold mt-2 shadow-inner">
               <button
                 type="button"
                 onClick={() => {
                   setAuthMode('login');
                   setErrorMsg('');
                 }}
-                className={`flex-1 py-2 rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2 rounded-full transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 ${
                   authMode === 'login'
-                    ? 'bg-white text-indigo-700 shadow-2xs'
+                    ? 'bg-white text-slate-900 shadow-sm font-black'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Lock className="w-3 h-3" />
-                <span>Private Login</span>
+                <span>Login</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('create');
+                  setErrorMsg('');
+                }}
+                className={`flex-1 py-2 rounded-full transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 ${
+                  authMode === 'create'
+                    ? 'bg-white text-slate-900 shadow-sm font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>Sign up</span>
               </button>
             </div>
           </div>
 
           {/* Error Message */}
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            <motion.div 
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2"
+            >
+              <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
               <span>{errorMsg}</span>
-            </div>
+            </motion.div>
           )}
 
-          {authMode === 'create' ? (
-            /* MULTI-STEP ANIMATED ONBOARDING FLOW */
+          {authMode === 'login' ? (
+            /* SCREEN 1: LOGIN FORM */
+            <form onSubmit={handlePrivateLogin} className="space-y-4 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Username or Invite Code
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={loginIdentifier}
+                    onChange={(e) => setLoginIdentifier(e.target.value)}
+                    placeholder="Enter your username or code"
+                    className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none transition"
+                    required
+                    autoFocus
+                  />
+                  <User className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Password / PIN
+                </label>
+                <div className="relative">
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'}
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter your security password"
+                    className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none transition pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Forgot Password link aligned neatly to the right side below the password field */}
+                <div className="flex justify-end pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(true)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 transition cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              </div>
+
+              {/* Main CTA Button: Sleek, dark pill-shaped "Login" button spanning full width */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-3.5 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-slate-900/15 transition cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Login</span>
+                </button>
+              </div>
+
+              <div className="text-center pt-2 text-xs text-slate-500">
+                Don't have a co-founder seat?{' '}
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('create')}
+                  className="font-bold text-blue-600 hover:text-blue-700 cursor-pointer underline"
+                >
+                  Sign up
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* SCREEN 1: SIGN UP MULTI-STEP FLOW */
             <div>
               {/* Progress Indicator */}
               <div className="space-y-1.5 mb-5">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
                   <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                     <span>
-                      {step === 1 && 'Step 1: Identity & Avatar / নাম ও ছবি'}
-                      {step === 2 && 'Step 2: Hobbies & Passions / তোমার শখ কি?'}
-                      {step === 3 && 'Step 3: Daily Habits / তোমার অভ্যাস কেমন?'}
-                      {step === 4 && 'Step 4: Screentime / কত ঘন্টা ফোন চালাও?'}
-                      {step === 5 && 'Step 5: Security Password & Launch / পাসওয়ার্ড'}
+                      {step === 1 && 'Step 1: Identity & Avatar'}
+                      {step === 2 && 'Step 2: Hobbies & Passions'}
+                      {step === 3 && 'Step 3: Daily Habits'}
+                      {step === 4 && 'Step 4: Screentime Goal'}
+                      {step === 5 && 'Step 5: Security Password & Launch'}
                     </span>
                   </span>
-                  <span className="font-mono text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                  <span className="font-mono text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100 font-black">
                     {step} / {totalSteps}
                   </span>
                 </div>
-                {/* Animated Progress Bar */}
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden p-0.5">
                   <motion.div
-                    className="h-full bg-indigo-600 rounded-full"
+                    className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full"
                     initial={{ width: '20%' }}
                     animate={{ width: `${(step / totalSteps) * 100}%` }}
-                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
                   />
                 </div>
               </div>
 
-              {/* Step Forms with Slide Animation */}
               <AnimatePresence mode="wait">
                 {step === 1 && (
                   <motion.div
@@ -376,11 +583,10 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.2 }}
                     className="space-y-4"
                   >
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
                         Your Full Name <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -388,56 +594,53 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. Aiman"
-                        className="w-full app-input px-3.5 py-2.5 text-sm"
+                        className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-2xl px-4 py-3 text-sm font-semibold outline-none transition"
                         autoFocus
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Your Agency Role
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Agency Role
                       </label>
                       <input
                         type="text"
                         value={role}
                         onChange={(e) => setRole(e.target.value)}
-                        placeholder="e.g. Creative Director, Lead Dev, Strategist"
-                        className="w-full app-input px-3.5 py-2.5 text-sm"
+                        placeholder="e.g. Creative Lead, Strategist, Dev"
+                        className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-2xl px-4 py-3 text-sm font-semibold outline-none transition"
                       />
                     </div>
 
-                    {/* Boy & Girl Avatar Selector */}
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-700">
-                          Select Avatar (ছেলে / মেয়ে)
-                        </label>
-                        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                        <label className="text-xs font-bold text-slate-700">Choose Avatar</label>
+                        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-full text-[10px] font-bold">
                           <button
                             type="button"
                             onClick={() => setAvatarGender('all')}
-                            className={`px-2 py-0.5 rounded ${avatarGender === 'all' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-500'}`}
+                            className={`px-2 py-0.5 rounded-full ${avatarGender === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'}`}
                           >
                             All
                           </button>
                           <button
                             type="button"
                             onClick={() => setAvatarGender('male')}
-                            className={`px-2 py-0.5 rounded ${avatarGender === 'male' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-500'}`}
+                            className={`px-2 py-0.5 rounded-full ${avatarGender === 'male' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'}`}
                           >
                             👦 Boy
                           </button>
                           <button
                             type="button"
                             onClick={() => setAvatarGender('female')}
-                            className={`px-2 py-0.5 rounded ${avatarGender === 'female' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-500'}`}
+                            className={`px-2 py-0.5 rounded-full ${avatarGender === 'female' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'}`}
                           >
                             👧 Girl
                           </button>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 border border-slate-200/80 rounded-2xl bg-slate-50/50">
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-44 overflow-y-auto p-1.5 border border-slate-200 rounded-2xl bg-slate-50/50">
                         {filteredAvatars.map((item) => {
                           const isSelected = selectedAvatar === item.url;
                           return (
@@ -445,19 +648,15 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                               key={item.id}
                               type="button"
                               onClick={() => setSelectedAvatar(item.url)}
-                              className={`relative p-1 rounded-xl border transition-all cursor-pointer ${
+                              className={`relative p-1 rounded-2xl border transition-all cursor-pointer ${
                                 isSelected
-                                  ? 'border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:border-indigo-300'
+                                  ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-600 shadow-sm scale-105'
+                                  : 'border-slate-200 bg-white hover:border-blue-300'
                               }`}
                             >
-                              <img
-                                src={item.url}
-                                alt={item.label}
-                                className="w-full aspect-square rounded-lg object-cover"
-                              />
+                              <img src={item.url} alt={item.label} className="w-full aspect-square rounded-xl object-cover" />
                               {isSelected && (
-                                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[9px] shadow-xs">
+                                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px]">
                                   <Check className="w-2.5 h-2.5 stroke-3" />
                                 </div>
                               )}
@@ -467,13 +666,13 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                       </div>
                     </div>
 
-                    <div className="pt-3 flex justify-end">
+                    <div className="pt-2 flex justify-end">
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                        className="w-full py-3.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
                       >
-                        <span>Continue to Hobbies</span>
+                        <span>Continue</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -486,24 +685,17 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.2 }}
-                    className="space-y-4"
+                    className="space-y-3"
                   >
                     <div>
-                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                        <Heart className="w-4 h-4 text-rose-500" />
-                        What Are Your Hobbies & Passions? / তোমার প্রিয় শখ কি?
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Select what you love doing. This configures your agency dashboard and skill targets.
-                      </p>
+                      <h3 className="text-sm font-black text-slate-900">Your Hobbies & Passions</h3>
+                      <p className="text-xs text-slate-500">Pick what you love to do.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                       {HOBBY_OPTIONS.map((hobby) => {
                         const Icon = hobby.icon;
                         const isSelected = selectedHobbies.includes(hobby.label);
-
                         return (
                           <button
                             key={hobby.id}
@@ -511,8 +703,8 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                             onClick={() => toggleHobby(hobby.label)}
                             className={`p-3 rounded-2xl border text-left flex items-center justify-between transition cursor-pointer ${
                               isSelected
-                                ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-500 shadow-2xs'
-                                : 'border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300'
+                                ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500 shadow-xs'
+                                : 'border-slate-200 bg-white hover:bg-slate-50'
                             }`}
                           >
                             <div className="flex items-center gap-2.5">
@@ -522,7 +714,7 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                               <span className="text-xs font-bold text-slate-800">{hobby.label}</span>
                             </div>
                             <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                              isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                              isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'
                             }`}>
                               {isSelected && <Check className="w-3 h-3 stroke-3" />}
                             </div>
@@ -531,21 +723,20 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                       })}
                     </div>
 
-                    <div className="pt-3 flex items-center justify-between">
+                    <div className="pt-2 flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>Back</span>
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
                       </button>
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                        className="flex-1 py-3 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
                       >
-                        <span>Continue to Habits ({selectedHobbies.length} selected)</span>
+                        <span>Next Step</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -558,24 +749,17 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.2 }}
-                    className="space-y-4"
+                    className="space-y-3"
                   >
                     <div>
-                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                        <Flame className="w-4 h-4 text-amber-500" />
-                        What Are Your Daily Habits? / তোমার অভ্যাস কেমন?
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Choose the core execution habits you commit to tracking every single day.
-                      </p>
+                      <h3 className="text-sm font-black text-slate-900">Choose Daily Habits</h3>
+                      <p className="text-xs text-slate-500">Pick habits you want to track daily.</p>
                     </div>
 
                     <div className="space-y-2 pt-1">
                       {HABIT_OPTIONS.map((habit) => {
                         const Icon = habit.icon;
                         const isSelected = selectedHabits.includes(habit.label);
-
                         return (
                           <button
                             key={habit.id}
@@ -583,8 +767,8 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                             onClick={() => toggleHabit(habit.label)}
                             className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition cursor-pointer ${
                               isSelected
-                                ? 'border-amber-500 bg-amber-50/50 ring-1 ring-amber-400 shadow-2xs'
-                                : 'border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300'
+                                ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-400 shadow-xs'
+                                : 'border-slate-200 bg-white hover:bg-slate-50'
                             }`}
                           >
                             <div className="flex items-center gap-3">
@@ -592,8 +776,8 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                                 <Icon className="w-4 h-4" />
                               </div>
                               <div>
-                                <h4 className="text-xs font-bold text-slate-900">{habit.label}</h4>
-                                <p className="text-[11px] text-slate-500">{habit.desc}</p>
+                                <span className="text-xs font-bold text-slate-900 block">{habit.label}</span>
+                                <span className="text-[11px] text-slate-500">{habit.desc}</span>
                               </div>
                             </div>
                             <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
@@ -606,21 +790,20 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                       })}
                     </div>
 
-                    <div className="pt-3 flex items-center justify-between">
+                    <div className="pt-2 flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>Back</span>
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
                       </button>
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                        className="flex-1 py-3 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
                       >
-                        <span>Continue to Screentime</span>
+                        <span>Next Step</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -633,72 +816,55 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.2 }}
-                    className="space-y-4"
+                    className="space-y-3"
                   >
                     <div>
-                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                        <Smartphone className="w-4 h-4 text-indigo-600" />
-                        How Many Hours Do You Use Mobile Daily? / তুমি কত ঘন্টা ফোন চালাও?
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Set your daily mobile screentime target to stay focused on high-leverage missions.
-                      </p>
+                      <h3 className="text-sm font-black text-slate-900">Daily Screentime Focus</h3>
+                      <p className="text-xs text-slate-500">Set daily target for phone & laptop screen usage.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                       {SCREEN_TIME_PRESETS.map((preset) => {
                         const isSelected = screenTime === preset.hours;
-
                         return (
                           <button
                             key={preset.hours}
                             type="button"
                             onClick={() => setScreenTime(preset.hours)}
-                            className={`p-3.5 rounded-2xl border text-left space-y-1.5 transition cursor-pointer ${
+                            className={`p-3 rounded-2xl border text-left space-y-1 transition cursor-pointer ${
                               isSelected
-                                ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-600 shadow-xs'
+                                ? 'border-purple-600 bg-purple-50/60 ring-2 ring-purple-500 shadow-xs'
                                 : 'border-slate-200 bg-white hover:bg-slate-50'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-black text-slate-900">{preset.hours}</span>
-                              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                                isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                              <span className="font-mono text-xs font-black text-slate-900">{preset.hours}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                isSelected ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-600'
                               }`}>
                                 {preset.badge}
                               </span>
                             </div>
-                            <p className="text-xs font-bold text-indigo-700">{preset.label}</p>
-                            <p className="text-[11px] text-slate-500">{preset.desc}</p>
+                            <p className="text-xs font-bold text-slate-800">{preset.label}</p>
                           </button>
                         );
                       })}
                     </div>
 
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center gap-3">
-                      <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
-                      <div className="text-xs text-slate-600">
-                        <span className="font-bold text-slate-900">Current selection: {screenTime}</span>. 
-                        We will help you keep agency execution ahead of doom-scrolling.
-                      </div>
-                    </div>
-
-                    <div className="pt-3 flex items-center justify-between">
+                    <div className="pt-2 flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>Back</span>
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
                       </button>
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                        className="flex-1 py-3 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
                       >
-                        <span>Set Security Password</span>
+                        <span>Next Step</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -708,24 +874,18 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                 {step === 5 && (
                   <motion.form
                     key="step-5"
+                    onSubmit={handleFinalSubmit}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.2 }}
-                    onSubmit={handleFinalSubmit}
                     className="space-y-4"
                   >
                     <div>
-                      <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        Lock Your Account with a Password / পাসওয়ার্ড দিন
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Set a secure password or 4-digit PIN. Only you will be able to unlock and view your account.
-                      </p>
+                      <h3 className="text-sm font-black text-slate-900">Set Security Password</h3>
+                      <p className="text-xs text-slate-500">Protect your seat and lock private missions.</p>
                     </div>
 
-                    <div className="space-y-3 pt-1">
+                    <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Security Password / PIN <span className="text-rose-500">*</span>
@@ -735,8 +895,8 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                             type={showPassword ? 'text' : 'password'}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Set a password or 4-digit PIN"
-                            className="w-full app-input px-3.5 py-2.5 text-sm pr-10"
+                            placeholder="Enter password"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm font-semibold outline-none pr-10"
                             required
                             autoFocus
                           />
@@ -752,19 +912,19 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Confirm Password / PIN <span className="text-rose-500">*</span>
+                          Confirm Password <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type={showPassword ? 'text' : 'password'}
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           placeholder="Repeat password"
-                          className="w-full app-input px-3.5 py-2.5 text-sm"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm font-semibold outline-none"
                           required
                         />
                       </div>
 
-                      <div className="pt-1">
+                      <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Partner's Invite Code (Optional)
                         </label>
@@ -772,107 +932,101 @@ export const CleanLightOnboarding: React.FC<CleanLightOnboardingProps> = ({
                           type="text"
                           value={partnerCode}
                           onChange={(e) => setPartnerCode(e.target.value.toUpperCase())}
-                          placeholder="e.g. AIMSH-9X12 (leave blank if connecting later)"
-                          className="w-full app-input px-3.5 py-2.5 text-xs font-mono tracking-wider"
+                          placeholder="e.g. AIMSH-XXXX"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-mono font-bold tracking-wider outline-none"
                         />
                       </div>
                     </div>
 
-                    <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200/80 flex items-center gap-2.5 text-emerald-800 text-xs font-semibold">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>100% Private. Other users cannot see or browse your account without your password.</span>
-                    </div>
-
-                    <div className="pt-3 flex items-center justify-between">
+                    <div className="pt-2 flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>Back</span>
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
                       </button>
                       <button
                         type="submit"
-                        className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-500/20 transition cursor-pointer"
+                        className="flex-1 py-3.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-lg shadow-slate-900/20 transition cursor-pointer"
                       >
-                        <Sparkles className="w-4 h-4" />
-                        <span>Launch & Open My Hub</span>
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        <span>Sign up & Enter</span>
                       </button>
                     </div>
                   </motion.form>
                 )}
               </AnimatePresence>
             </div>
-          ) : (
-            /* SECURE PRIVATE LOGIN FORM (No accounts listed!) */
-            <form onSubmit={handlePrivateLogin} className="space-y-4 animate-in fade-in">
-              <div className="p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 flex items-center gap-2.5 text-indigo-900 text-xs font-semibold">
-                <KeyRound className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span>Enter your own Name or Invite Code and password to unlock your account.</span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Your Name or Invite Code <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={loginIdentifier}
-                  onChange={(e) => setLoginIdentifier(e.target.value)}
-                  placeholder="e.g. Aiman or AIMSH-XXXX"
-                  className="w-full app-input px-3.5 py-2.5 text-sm"
-                  required
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Security Password / PIN
-                </label>
-                <div className="relative">
-                  <input
-                    type={showLoginPassword ? 'text' : 'password'}
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your security password or PIN"
-                    className="w-full app-input px-3.5 py-2.5 text-sm pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span>Unlock & Enter My Hub</span>
-                </button>
-              </div>
-
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('create')}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
-                >
-                  Need a new account? Create Founder Seat &rarr;
-                </button>
-              </div>
-            </form>
           )}
 
-        </div>
+        </motion.div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900">Forgot Password?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Your account is 100% private. You can unlock your account using your original Partner Invite Code (e.g. AIMSH-XXXX) or ask your co-founder partner to verify your code.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowForgotModal(false)}
+              className="w-full py-2.5 rounded-full bg-slate-900 text-white font-bold text-xs cursor-pointer shadow-sm"
+            >
+              Close
+            </button>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Success Overlay Modal (OK Hand Gesture & Checkmark Starburst) */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-[32px] p-6 sm:p-8 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center relative overflow-hidden"
+          >
+            {/* Success Badge */}
+            <div className="flex justify-center">
+              <SuccessBadgeIllustration className="w-24 h-24" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                Login Successful
+              </h3>
+              <p className="text-xs text-slate-500 font-medium max-w-xs mx-auto">
+                Welcome back, <strong>{pendingSuccessUser?.name}</strong>! Your private workspace and bilateral sync are ready.
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleCompleteSuccess}
+                className="w-full py-3.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-lg shadow-slate-900/20 active:scale-[0.99] transition cursor-pointer"
+              >
+                Got it
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
     </div>
   );
 };

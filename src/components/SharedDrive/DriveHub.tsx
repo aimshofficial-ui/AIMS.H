@@ -17,8 +17,17 @@ import {
   Play, 
   Sparkles,
   Layers,
-  Clock
+  Clock,
+  Video,
+  FileText,
+  Share2,
+  Users,
+  Eye,
+  X,
+  Palette,
+  CheckCircle2
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { DriveFolder, ResourceLink, CuratedVaultVideo, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
 
@@ -27,25 +36,93 @@ interface DriveHubProps {
   onUpdateData: (data: SharedAppData) => void;
 }
 
-const ICON_MAP: Record<string, React.ElementType> = {
-  Film,
-  FolderLock,
-  FileSpreadsheet,
-  GraduationCap,
-  Cpu,
-  Folder,
+// 3D Geometric Torus & Sphere SVG Art for Drive Cards
+const Torus3DArt: React.FC<{ color?: string; size?: string }> = ({ color = 'orange', size = 'w-16 h-16' }) => {
+  return (
+    <svg className={`${size} opacity-85 select-none drop-shadow-md pointer-events-none`} viewBox="0 0 100 100" fill="none">
+      <defs>
+        <radialGradient id={`drive3d-${color}`} cx="35%" cy="35%" r="65%">
+          {color === 'orange' && (
+            <>
+              <stop offset="0%" stopColor="#ffedd5" />
+              <stop offset="40%" stopColor="#fb923c" />
+              <stop offset="100%" stopColor="#c2410c" />
+            </>
+          )}
+          {color === 'blue' && (
+            <>
+              <stop offset="0%" stopColor="#e0f2fe" />
+              <stop offset="40%" stopColor="#38bdf8" />
+              <stop offset="100%" stopColor="#0369a1" />
+            </>
+          )}
+          {color === 'pink' && (
+            <>
+              <stop offset="0%" stopColor="#fce7f3" />
+              <stop offset="40%" stopColor="#f472b6" />
+              <stop offset="100%" stopColor="#be185d" />
+            </>
+          )}
+          {color === 'purple' && (
+            <>
+              <stop offset="0%" stopColor="#f3e8ff" />
+              <stop offset="40%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#6b21a8" />
+            </>
+          )}
+        </radialGradient>
+        <radialGradient id={`sphereGrad-${color}`} cx="30%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+          <stop offset="50%" stopColor="#ffffff" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.25" />
+        </radialGradient>
+      </defs>
+      
+      {/* 3D Interlocking Torus Ring */}
+      <circle cx="50" cy="50" r="32" stroke={`url(#drive3d-${color})`} strokeWidth="15" strokeLinecap="round" strokeDasharray="160 30" />
+      <circle cx="50" cy="50" r="32" stroke={`url(#sphereGrad-${color})`} strokeWidth="15" strokeLinecap="round" strokeDasharray="160 30" />
+      
+      {/* 3D Floating Accent Spheres */}
+      <circle cx="72" cy="28" r="8" fill={`url(#drive3d-${color})`} />
+      <circle cx="72" cy="28" r="8" fill={`url(#sphereGrad-${color})`} />
+      <circle cx="28" cy="68" r="5" fill={`url(#drive3d-${color})`} />
+    </svg>
+  );
 };
+
+function getYouTubeEmbedUrl(url: string): string | null {
+  try {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}?autoplay=1` : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function isVideoResource(url: string, category: string): boolean {
+  const lower = url.toLowerCase();
+  const lowerCat = category.toLowerCase();
+  return (
+    lower.includes('youtube.com') ||
+    lower.includes('youtu.be') ||
+    lower.includes('loom.com') ||
+    lower.includes('vimeo.com') ||
+    lower.endsWith('.mp4') ||
+    lowerCat.includes('video')
+  );
+}
 
 export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | 'all'>('all');
+  const [viewFilter, setViewFilter] = useState<'all' | 'mine' | 'partner'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'resources' | 'vault'>('resources');
+  const [activePlayerUrl, setActivePlayerUrl] = useState<{ title: string; url: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Modal states
   const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
   const [isAddFolderOpen, setIsAddFolderOpen] = useState(false);
-  const [isAddVaultOpen, setIsAddVaultOpen] = useState(false);
 
   // New Resource form state
   const [resTitle, setResTitle] = useState('');
@@ -57,16 +134,17 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
   // New Folder form state
   const [folderName, setFolderName] = useState('');
   const [folderDesc, setFolderDesc] = useState('');
-  const [folderColor, setFolderColor] = useState('#6366f1');
-  const [folderIcon, setFolderIcon] = useState('Folder');
+  const [folderColor, setFolderColor] = useState('orange');
 
-  // New Vault form state
-  const [vaultTitle, setVaultTitle] = useState('');
-  const [vaultStyle, setVaultStyle] = useState('Video Style Breakdown');
-  const [vaultCreator, setVaultCreator] = useState('');
-  const [vaultUrl, setVaultUrl] = useState('');
-  const [vaultDuration, setVaultDuration] = useState('10:00');
-  const [vaultBreakdown, setVaultBreakdown] = useState('');
+  const foundersList = Object.values(appData.founders);
+  const activeUser = appData.founders[appData.activeFounderId] || foundersList[0] || {
+    id: 'user_1',
+    name: 'You',
+    role: 'Co-Founder',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+  };
+
+  const partnerUser = foundersList.find((f) => f.id !== activeUser.id);
 
   const handleCopyLink = (url: string, id: string) => {
     navigator.clipboard.writeText(url);
@@ -90,15 +168,6 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
     onUpdateData(updated);
   };
 
-  const handleDeleteVault = (vaultId: string) => {
-    const updated = {
-      ...appData,
-      vaultVideos: appData.vaultVideos.filter((v) => v.id !== vaultId),
-    };
-    saveAppData(updated);
-    onUpdateData(updated);
-  };
-
   const handleCreateResource = (e: React.FormEvent) => {
     e.preventDefault();
     if (!resTitle.trim() || !resUrl.trim()) return;
@@ -110,7 +179,7 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
       description: resDesc.trim(),
       url: resUrl.trim(),
       category: resCategory.trim() || 'Asset',
-      authorId: appData.activeFounderId,
+      authorId: activeUser.id,
       addedAt: new Date().toISOString().split('T')[0],
       isFavorite: false,
     };
@@ -137,7 +206,7 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
       name: folderName.trim(),
       description: folderDesc.trim(),
       color: folderColor,
-      iconName: folderIcon,
+      iconName: 'Folder',
     };
 
     const updated = {
@@ -152,583 +221,644 @@ export const DriveHub: React.FC<DriveHubProps> = ({ appData, onUpdateData }) => 
     setIsAddFolderOpen(false);
   };
 
-  const handleCreateVault = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!vaultTitle.trim() || !vaultUrl.trim()) return;
-
-    const newVault: CuratedVaultVideo = {
-      id: `v-${Date.now()}`,
-      title: vaultTitle.trim(),
-      styleTag: vaultStyle.trim(),
-      creator: vaultCreator.trim() || 'Reference Creator',
-      videoUrl: vaultUrl.trim(),
-      thumbnailUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=600&q=80',
-      duration: vaultDuration.trim() || '10:00',
-      breakdown: vaultBreakdown.trim(),
-    };
-
-    const updated = {
-      ...appData,
-      vaultVideos: [newVault, ...appData.vaultVideos],
-    };
-    saveAppData(updated);
-    onUpdateData(updated);
-
-    setVaultTitle('');
-    setVaultUrl('');
-    setVaultBreakdown('');
-    setIsAddVaultOpen(false);
-  };
-
+  // Filter resources
   const filteredResources = appData.resources.filter((r) => {
     if (selectedFolderId !== 'all' && r.folderId !== selectedFolderId) return false;
+    if (viewFilter === 'mine' && r.authorId !== activeUser.id) return false;
+    if (viewFilter === 'partner') {
+      if (partnerUser) {
+        if (r.authorId !== partnerUser.id) return false;
+      } else {
+        if (r.authorId === activeUser.id) return false;
+      }
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchTitle = r.title.toLowerCase().includes(q);
-      const matchDesc = r.description.toLowerCase().includes(q);
-      const matchCat = r.category.toLowerCase().includes(q);
-      if (!matchTitle && !matchDesc && !matchCat) return false;
+      return (
+        r.title.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        r.category.toLowerCase().includes(q)
+      );
     }
     return true;
   });
 
+  const myResourceCount = appData.resources.filter((r) => r.authorId === activeUser.id).length;
+  const partnerResourceCount = partnerUser
+    ? appData.resources.filter((r) => r.authorId === partnerUser.id).length
+    : appData.resources.filter((r) => r.authorId !== activeUser.id).length;
+
   return (
-    <div className="space-y-4 pb-12">
+    <div className="space-y-4 max-w-4xl mx-auto font-sans">
       
-      {/* Top Banner Card */}
-      <div className="app-card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
-              <FolderKanban className="w-5 h-5 text-indigo-600" />
-              Shared Drive & Asset Library Hub
-            </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
-              {appData.resources.length} Links Saved
+      {/* 1. HERO BANNER: 3D Minimalist Shared Drive & Video Links Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 text-white p-5 sm:p-6 shadow-xl shadow-indigo-500/20"
+      >
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
+          <Torus3DArt color="pink" size="w-32 h-32" />
+        </div>
+
+        <div className="relative z-10 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-md text-indigo-100 border border-white/20 flex items-center gap-1.5">
+              <Share2 className="w-3 h-3 text-amber-300" />
+              Shared Agency Drive & Video Vault
+            </span>
+
+            <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-400/30">
+              ● Live Partner Sync
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Store Google Drive folders, Notion documents, Dropbox assets, and study videos in clean boxes.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {activeSubTab === 'resources' ? (
-            <>
-              <button
-                onClick={() => setIsAddFolderOpen(true)}
-                className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New Folder
-              </button>
-              <button
-                onClick={() => setIsAddResourceOpen(true)}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition"
-              >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                Add Resource Link
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setIsAddVaultOpen(true)}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              Add Vault Reference
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Sub Tabs Pill */}
-      <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200/80 w-fit text-xs">
-        <button
-          onClick={() => setActiveSubTab('resources')}
-          className={`px-3.5 py-1.5 font-bold rounded-lg transition flex items-center gap-2 ${
-            activeSubTab === 'resources'
-              ? 'bg-white text-indigo-700 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          Drive & Asset Manager ({appData.resources.length})
-        </button>
-        <button
-          onClick={() => setActiveSubTab('vault')}
-          className={`px-3.5 py-1.5 font-bold rounded-lg transition flex items-center gap-2 ${
-            activeSubTab === 'vault'
-              ? 'bg-white text-indigo-700 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Film className="w-3.5 h-3.5" />
-          Video Reference Vault ({appData.vaultVideos.length})
-        </button>
-      </div>
-
-      {activeSubTab === 'resources' ? (
-        <>
-          {/* Folders Row */}
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div
-                onClick={() => setSelectedFolderId('all')}
-                className={`p-3.5 rounded-2xl border cursor-pointer transition space-y-1.5 ${
-                  selectedFolderId === 'all'
-                    ? 'bg-indigo-50/70 border-indigo-300 shadow-xs'
-                    : 'bg-white border-slate-200/80 hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
-                    <Folder className="w-4 h-4" />
-                  </div>
-                  <span className="text-xs font-mono font-bold text-slate-600">
-                    {appData.resources.length}
-                  </span>
-                </div>
-                <h4 className="text-xs font-bold text-slate-900 truncate">All Resources</h4>
-                <p className="text-[10px] text-slate-500 truncate">Entire agency repository</p>
-              </div>
-
-              {appData.folders.map((folder) => {
-                const FolderIconComponent = ICON_MAP[folder.iconName] || Folder;
-                const isSelected = selectedFolderId === folder.id;
-                const count = appData.resources.filter((r) => r.folderId === folder.id).length;
-
-                return (
-                  <div
-                    key={folder.id}
-                    onClick={() => setSelectedFolderId(folder.id)}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition space-y-1.5 ${
-                      isSelected
-                        ? 'bg-indigo-50/70 border-indigo-300 shadow-xs'
-                        : 'bg-white border-slate-200/80 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div
-                        className="p-2 rounded-xl"
-                        style={{ backgroundColor: `${folder.color}15`, color: folder.color }}
-                      >
-                        <FolderIconComponent className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs font-mono font-bold text-slate-600">{count}</span>
-                    </div>
-                    <h4 className="text-xs font-bold text-slate-900 truncate">{folder.name}</h4>
-                    <p className="text-[10px] text-slate-500 truncate">{folder.description}</p>
-                  </div>
-                );
-              })}
-            </div>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
+              Every file & video link is automatically shared with your co-founder.
+            </h2>
+            <p className="text-xs text-indigo-100/90 mt-1 max-w-md">
+              Google Drive links, YouTube review links, Loom walkthroughs, and client assets sync instantaneously across both devices.
+            </p>
           </div>
 
-          {/* Search bar */}
-          {appData.resources.length > 0 && (
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <div className="text-xs text-slate-500">
-                Showing <strong className="text-slate-800">{filteredResources.length}</strong> items
+          <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center -space-x-2">
+                <img src={activeUser.avatar} alt="You" className="w-8 h-8 rounded-full border-2 border-indigo-700 object-cover" />
+                {partnerUser && (
+                  <img src={partnerUser.avatar} alt="Partner" className="w-8 h-8 rounded-full border-2 border-indigo-700 object-cover" />
+                )}
               </div>
-              <div className="w-full sm:w-60">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search saved links..."
-                  className="w-full px-3 py-1.5 rounded-lg app-input text-xs"
-                />
-              </div>
+              <span className="text-xs font-bold text-indigo-200">
+                {partnerUser ? `Synced with ${partnerUser.name.split(' ')[0]}` : 'Dual Workspace Ready'}
+              </span>
             </div>
-          )}
 
-          {/* Empty state when 0 resources */}
-          {appData.resources.length === 0 ? (
-            <div className="app-card p-10 text-center space-y-4 border-dashed border-2 border-slate-200">
-              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 mx-auto flex items-center justify-center">
-                <FolderKanban className="w-7 h-7" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-900">Your Asset Library is Clean & Ready</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Save your shared Google Drive folders, client deliverables, Notion databases, or Figma links here.
-                </p>
-              </div>
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsAddResourceOpen(true)}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center gap-2 shadow-xs transition"
+                type="button"
+                onClick={() => setIsAddFolderOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer backdrop-blur-md border border-white/20"
               >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                Add First Resource Link
+                <Folder className="w-3.5 h-3.5" />
+                <span>New Folder</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAddResourceOpen(true)}
+                className="px-4 py-2 rounded-xl bg-white hover:bg-indigo-50 text-indigo-900 font-extrabold text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-3" />
+                <span>Add File / Video Link</span>
               </button>
             </div>
-          ) : (
-            /* Resource Cards Grid */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {filteredResources.map((res) => {
-                const parentFolder = appData.folders.find((f) => f.id === res.folderId);
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 2. FILTER & PERSPECTIVE TABS (All vs Mine vs Partner) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        
+        {/* Collaborative Perspective Switcher */}
+        <div className="flex items-center gap-1 bg-slate-200/70 p-1 rounded-2xl border border-slate-200 text-xs font-bold w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setViewFilter('all')}
+            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              viewFilter === 'all'
+                ? 'bg-white text-indigo-700 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>All Shared ({appData.resources.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewFilter('mine')}
+            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              viewFilter === 'mine'
+                ? 'bg-white text-indigo-700 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <img src={activeUser.avatar} alt="You" className="w-3.5 h-3.5 rounded-full object-cover" />
+            <span>My Uploads ({myResourceCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewFilter('partner')}
+            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              viewFilter === 'partner'
+                ? 'bg-white text-emerald-700 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            {partnerUser ? (
+              <img src={partnerUser.avatar} alt="Partner" className="w-3.5 h-3.5 rounded-full object-cover" />
+            ) : (
+              <Users className="w-3.5 h-3.5 text-emerald-600" />
+            )}
+            <span>{partnerUser ? `${partnerUser.name.split(' ')[0]}'s Shared` : 'Partner Shared'} ({partnerResourceCount})</span>
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative flex-1 sm:w-56">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files or video links..."
+            className="w-full app-input pl-8.5 pr-3 py-2 text-xs"
+          />
+        </div>
+      </div>
+
+      {/* 3. 3D PASTEL FOLDERS ROW */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <button
+          type="button"
+          onClick={() => setSelectedFolderId('all')}
+          className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+            selectedFolderId === 'all'
+              ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs'
+              : 'bg-white hover:bg-slate-50 border-slate-200/80'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+              <FolderKanban className="w-4 h-4" />
+            </div>
+            <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+              {appData.resources.length}
+            </span>
+          </div>
+          <p className="text-xs font-black text-slate-900">All Folders</p>
+          <p className="text-[10px] text-slate-500">Master repository</p>
+        </button>
+
+        {appData.folders.map((folder, idx) => {
+          const count = appData.resources.filter((r) => r.folderId === folder.id).length;
+          const isSelected = selectedFolderId === folder.id;
+          
+          // Rotating 3D Pastel Folder Theme
+          const colorVariant = idx % 3 === 0 ? 'orange' : idx % 3 === 1 ? 'blue' : 'pink';
+          const cardClass = 
+            colorVariant === 'orange' ? 'card-pastel-orange' :
+            colorVariant === 'blue' ? 'card-pastel-blue' : 'card-pastel-pink';
+
+          return (
+            <button
+              key={folder.id}
+              type="button"
+              onClick={() => setSelectedFolderId(folder.id)}
+              className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden ${cardClass} ${
+                isSelected ? 'ring-2 ring-indigo-600 shadow-md' : 'hover:shadow-sm'
+              }`}
+            >
+              <div className="absolute right-0 top-0 pointer-events-none opacity-40">
+                <Torus3DArt color={colorVariant} size="w-14 h-14" />
+              </div>
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-white/80 text-slate-800 flex items-center justify-center shadow-2xs">
+                    <Folder className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200">
+                    {count} items
+                  </span>
+                </div>
+                <p className="text-xs font-black text-slate-900 truncate">{folder.name}</p>
+                <p className="text-[10px] text-slate-600 truncate">{folder.description || 'Shared folder'}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 4. SHARED FILES & VIDEO LINKS GRID (3D Minimalist Cards) */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Shared Links & Media Assets ({filteredResources.length})</span>
+          </h3>
+
+          <span className="text-[11px] text-slate-500 font-semibold">
+            Click Watch to view videos directly
+          </span>
+        </div>
+
+        {filteredResources.length === 0 ? (
+          <div className="app-card p-10 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
+              <FolderKanban className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-black text-slate-900">No resources found in this view</h4>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Drop Google Drive, YouTube, Loom, or Figma links to share immediately with your partner.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsAddResourceOpen(true)}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Add First Link
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <AnimatePresence mode="popLayout">
+              {filteredResources.map((res, idx) => {
+                const author = appData.founders[res.authorId] || (res.authorId === activeUser.id ? activeUser : partnerUser || activeUser);
+                const isOwner = res.authorId === activeUser.id;
+                const isCopied = copiedId === res.id;
+                const isVideo = isVideoResource(res.url, res.category);
+
+                // Rotating 3D Pastel Palette
+                const colorVariant = idx % 3 === 0 ? 'orange' : idx % 3 === 1 ? 'blue' : 'pink';
+                const cardClass = 
+                  colorVariant === 'orange' ? 'card-pastel-orange' :
+                  colorVariant === 'blue' ? 'card-pastel-blue' : 'card-pastel-pink';
 
                 return (
-                  <div
+                  <motion.div
                     key={res.id}
-                    className="app-card p-4 space-y-2.5 flex flex-col justify-between"
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className={`relative overflow-hidden p-4 rounded-3xl ${cardClass} shadow-sm transition-all hover:shadow-md flex flex-col justify-between gap-3`}
                   >
-                    <div>
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span
-                          className="text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold"
-                          style={{
-                            backgroundColor: parentFolder ? `${parentFolder.color}15` : '#f1f5f9',
-                            color: parentFolder ? parentFolder.color : '#475569',
-                          }}
-                        >
-                          {parentFolder ? parentFolder.name : res.category}
+                    {/* 3D Torus Accent in Card Corner */}
+                    <div className="absolute right-2 top-3 pointer-events-none">
+                      <Torus3DArt color={colorVariant} size="w-16 h-16" />
+                    </div>
+
+                    <div className="relative z-10 space-y-2 max-w-[80%]">
+                      {/* Category & Owner Tag */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/90 text-slate-800 border border-slate-200/80 flex items-center gap-1">
+                          {isVideo ? <Film className="w-3 h-3 text-rose-500" /> : <FileText className="w-3 h-3 text-indigo-500" />}
+                          {res.category}
                         </span>
 
-                        <div className="flex items-center gap-1">
+                        <div 
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/90 text-[10px] font-bold text-slate-700 border border-slate-200/80"
+                          title={`Shared by ${author.name}`}
+                        >
+                          <img src={author.avatar} alt={author.name} className="w-3.5 h-3.5 rounded-full object-cover" />
+                          <span>{isOwner ? 'You' : author.name.split(' ')[0]}</span>
+                        </div>
+                      </div>
+
+                      {/* Title & Description */}
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900 leading-snug">{res.title}</h4>
+                        {res.description ? (
+                          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
+                            {res.description}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Action Bar */}
+                    <div className="relative z-10 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        {/* If it's a video, provide In-App Player button */}
+                        {isVideo && (
                           <button
-                            onClick={() => handleToggleFavorite(res.id)}
-                            className="p-1 rounded text-slate-400 hover:text-amber-500 transition"
+                            type="button"
+                            onClick={() => setActivePlayerUrl({ title: res.title, url: res.url })}
+                            className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
                           >
-                            <Star
-                              className={`w-3.5 h-3.5 ${
-                                res.isFavorite ? 'fill-amber-400 text-amber-400' : ''
-                              }`}
-                            />
+                            <Play className="w-3 h-3 fill-white" />
+                            <span>Watch</span>
                           </button>
+                        )}
+
+                        <a
+                          href={res.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-[11px] flex items-center gap-1 border border-slate-200 transition cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3 text-slate-500" />
+                          <span>Open</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyLink(res.url, res.id)}
+                          className="p-1 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition cursor-pointer"
+                          title="Copy Link"
+                        >
+                          {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                        </button>
+                      </div>
+
+                      {/* Favorite & Delete Actions */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFavorite(res.id)}
+                          className="p-1 text-slate-400 hover:text-amber-500 transition cursor-pointer"
+                          title="Favorite"
+                        >
+                          <Star className={`w-3.5 h-3.5 ${res.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />
+                        </button>
+
+                        {isOwner && (
                           <button
+                            type="button"
                             onClick={() => handleDeleteResource(res.id)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-500 transition"
+                            className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                             title="Delete"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </div>
-                      </div>
-
-                      <h4 className="text-xs font-bold text-slate-900 line-clamp-1">{res.title}</h4>
-                      {res.description && (
-                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
-                          {res.description}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 space-y-2">
-                      <div className="text-[10px] font-mono text-slate-500 truncate bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-                        {res.url}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400">{res.addedAt}</span>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleCopyLink(res.url, res.id)}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
-                            title="Copy URL"
-                          >
-                            {copiedId === res.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-
-                          <a
-                            href={res.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1 transition"
-                          >
-                            Open <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
-          )}
-        </>
-      ) : (
-        /* Video Vault Section */
-        <div className="space-y-4">
-          {appData.vaultVideos.length === 0 ? (
-            <div className="app-card p-10 text-center space-y-4 border-dashed border-2 border-slate-200">
-              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 mx-auto flex items-center justify-center">
-                <Film className="w-7 h-7" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-900">Video Vault is Clean & Fresh</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Add benchmark video editing styles, motion design trends, and retention breakdowns to study together.
-                </p>
-              </div>
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+
+      {/* VIDEO PLAYER MODAL (Watch inside app) */}
+      {activePlayerUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/80 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-2xl bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-white/10 text-white space-y-3 p-4"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <h3 className="text-sm font-black truncate">{activePlayerUrl.title}</h3>
               <button
-                onClick={() => setIsAddVaultOpen(true)}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center gap-2 shadow-xs transition"
+                type="button"
+                onClick={() => setActivePlayerUrl(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
               >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                Add First Reference Style
+                <X className="w-4 h-4" />
               </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {appData.vaultVideos.map((video) => (
-                <div
-                  key={video.id}
-                  className="app-card rounded-2xl overflow-hidden space-y-3 p-4 flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold">
-                        {video.styleTag}
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-mono">{video.duration}</span>
-                    </div>
 
-                    <h4 className="text-sm font-bold text-slate-900">{video.title}</h4>
-                    <p className="text-xs text-slate-500">{video.creator}</p>
-                    
-                    {video.breakdown && (
-                      <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 mt-2">
-                        {video.breakdown}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <button
-                      onClick={() => handleDeleteVault(video.id)}
-                      className="p-1 rounded text-slate-400 hover:text-rose-600 transition"
-                      title="Delete reference"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <a
-                      href={video.videoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                    >
-                      Watch Reference <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
+            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black">
+              {getYouTubeEmbedUrl(activePlayerUrl.url) ? (
+                <iframe
+                  src={getYouTubeEmbedUrl(activePlayerUrl.url)!}
+                  title={activePlayerUrl.title}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : activePlayerUrl.url.endsWith('.mp4') ? (
+                <video src={activePlayerUrl.url} controls autoPlay className="w-full h-full" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-3">
+                  <Film className="w-10 h-10 text-indigo-400" />
+                  <p className="text-xs text-slate-300">
+                    This video is hosted on an external provider (Loom / Drive / Vimeo).
+                  </p>
+                  <a
+                    href={activePlayerUrl.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open in External Player
+                  </a>
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </motion.div>
         </div>
       )}
 
-      {/* Add Resource Modal */}
+      {/* ADD FILE / VIDEO LINK MODAL */}
       {isAddResourceOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 text-slate-800 shadow-2xl relative border border-slate-200">
-            <h3 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-indigo-600" />
-              Add Resource Link
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Save Google Drive folders, Dropbox links, Notion boards, or assets.
-            </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-xs">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="app-card w-full max-w-md p-5 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+                  <Plus className="w-4 h-4 stroke-3" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Add Shared File or Video</h3>
+                  <p className="text-xs text-slate-500">Instantly visible & accessible to your partner.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddResourceOpen(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleCreateResource} className="space-y-3.5">
+            <form onSubmit={handleCreateResource} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Resource Title *
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  File / Video Title <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
-                  required
                   value={resTitle}
                   onChange={(e) => setResTitle(e.target.value)}
-                  placeholder="e.g. Master Proposal Deck & Case Studies"
-                  className="w-full px-3.5 py-2.5 text-xs app-input"
+                  placeholder="e.g. Agency Client Reel / Pitch Deck / Raw Footage"
+                  className="w-full app-input px-3.5 py-2 text-xs"
+                  required
+                  autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Destination URL *
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  URL / Video Link <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="url"
-                  required
                   value={resUrl}
                   onChange={(e) => setResUrl(e.target.value)}
-                  placeholder="https://drive.google.com/drive/folders/..."
-                  className="w-full px-3.5 py-2.5 text-xs app-input font-mono"
+                  placeholder="https://drive.google.com/... or https://youtube.com/..."
+                  className="w-full app-input px-3.5 py-2 text-xs"
+                  required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Assign to Folder
-                  </label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Target Folder</label>
                   <select
                     value={resFolder}
                     onChange={(e) => setResFolder(e.target.value)}
-                    className="w-full px-3 py-2 text-xs app-input"
+                    className="w-full app-input px-3 py-2 text-xs"
                   >
                     {appData.folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
+                      <option key={f.id} value={f.id}>{f.name}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Category Tag
-                  </label>
-                  <input
-                    type="text"
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <select
                     value={resCategory}
                     onChange={(e) => setResCategory(e.target.value)}
-                    placeholder="Drive, Notion, Asset"
-                    className="w-full px-3 py-2 text-xs app-input"
-                  />
+                    className="w-full app-input px-3 py-2 text-xs"
+                  >
+                    <option value="Google Drive">Google Drive</option>
+                    <option value="YouTube Video">YouTube Video</option>
+                    <option value="Loom Video">Loom Walkthrough</option>
+                    <option value="Figma Design">Figma Design</option>
+                    <option value="Canva Template">Canva Template</option>
+                    <option value="PDF Document">PDF Document</option>
+                    <option value="Client Asset">Client Asset</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Notes / Access Description
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description / Notes</label>
                 <textarea
-                  rows={2}
                   value={resDesc}
                   onChange={(e) => setResDesc(e.target.value)}
-                  placeholder="Contains high-res client deliverables and assets..."
-                  className="w-full px-3 py-2 text-xs app-input resize-none"
+                  placeholder="Brief context for your partner..."
+                  className="w-full app-input px-3 py-2 text-xs h-16 resize-none"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 flex items-center gap-2 text-indigo-900 text-[11px] font-semibold">
+                <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Your partner will be able to watch or open this file directly.</span>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddResourceOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 transition"
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer"
                 >
-                  Save Link
+                  Publish & Share
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
-      {/* Add Folder Modal */}
+      {/* ADD FOLDER MODAL */}
       {isAddFolderOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 text-slate-800 shadow-2xl relative border border-slate-200">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Create Folder</h3>
-            <p className="text-xs text-slate-500 mb-4">Add a new bucket to categorize your resources.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-xs">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="app-card w-full max-w-sm p-5 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <Folder className="w-4 h-4 text-indigo-600" />
+                New Shared Folder
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddFolderOpen(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleCreateFolder} className="space-y-3.5">
+            <form onSubmit={handleCreateFolder} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Folder Name *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Folder Name</label>
                 <input
                   type="text"
-                  required
                   value={folderName}
                   onChange={(e) => setFolderName(e.target.value)}
-                  placeholder="e.g. Sales Funnels & Cold DMs"
-                  className="w-full px-3.5 py-2.5 text-xs app-input"
+                  placeholder="e.g. Reels & Short Form"
+                  className="w-full app-input px-3 py-2 text-xs"
+                  required
+                  autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Description</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Color Style</label>
+                <div className="flex items-center gap-2">
+                  {['orange', 'blue', 'pink', 'purple'].map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => setFolderColor(col)}
+                      className={`flex-1 py-1.5 rounded-xl border text-xs font-bold capitalize cursor-pointer ${
+                        folderColor === col ? 'ring-2 ring-indigo-600 shadow-2xs' : 'opacity-70'
+                      } ${
+                        col === 'orange' ? 'bg-orange-100 text-orange-800 border-orange-200' :
+                        col === 'blue' ? 'bg-sky-100 text-sky-800 border-sky-200' :
+                        col === 'pink' ? 'bg-pink-100 text-pink-800 border-pink-200' :
+                        'bg-purple-100 text-purple-800 border-purple-200'
+                      }`}
+                    >
+                      {col}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
                 <input
                   type="text"
                   value={folderDesc}
                   onChange={(e) => setFolderDesc(e.target.value)}
-                  placeholder="Short note on what goes in here"
-                  className="w-full px-3.5 py-2 text-xs app-input"
+                  placeholder="Purpose of this folder"
+                  className="w-full app-input px-3 py-2 text-xs"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddFolderOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 transition"
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm cursor-pointer"
                 >
                   Create Folder
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Vault Reference Modal */}
-      {isAddVaultOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 text-slate-800 shadow-2xl relative border border-slate-200">
-            <h3 className="text-base font-bold text-slate-900 mb-1">Add Vault Reference</h3>
-            <p className="text-xs text-slate-500 mb-4">Save reference editing styles or timelines.</p>
-
-            <form onSubmit={handleCreateVault} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={vaultTitle}
-                  onChange={(e) => setVaultTitle(e.target.value)}
-                  placeholder="e.g. Vox Kinetic Graphics Style"
-                  className="w-full px-3.5 py-2 text-xs app-input"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Video URL *</label>
-                <input
-                  type="url"
-                  required
-                  value={vaultUrl}
-                  onChange={(e) => setVaultUrl(e.target.value)}
-                  placeholder="https://youtube.com/watch?v=..."
-                  className="w-full px-3.5 py-2 text-xs app-input font-mono"
-                />
-              </div>
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddVaultOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 text-xs font-semibold text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow-xs"
-                >
-                  Save Reference
-                </button>
-              </div>
-            </form>
-          </div>
+          </motion.div>
         </div>
       )}
 

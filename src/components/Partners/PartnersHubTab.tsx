@@ -13,16 +13,73 @@ import {
   MessageSquare,
   ShieldCheck,
   Zap,
-  Activity
+  Activity,
+  UserCheck,
+  Vibrate,
+  UserMinus,
+  CheckCircle
 } from 'lucide-react';
-import { SharedAppData, PartnerRequest, UserProfile } from '../../types';
+import { motion, AnimatePresence } from 'motion/react';
+import { SharedAppData, PartnerRequest, UserProfile, PartnerConnection } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { pushAppNotification, triggerMobileAlert } from '../../utils/notifications';
 
 interface PartnersHubTabProps {
   appData: SharedAppData;
   onUpdateData: (data: SharedAppData) => void;
   onNavigateToChat: () => void;
 }
+
+// 3D Geometric Torus & Sphere SVG Art
+const Torus3DArt: React.FC<{ color?: string; size?: string }> = ({ color = 'orange', size = 'w-16 h-16' }) => {
+  return (
+    <svg className={`${size} opacity-85 select-none drop-shadow-md pointer-events-none`} viewBox="0 0 100 100" fill="none">
+      <defs>
+        <radialGradient id={`partner3d-${color}`} cx="35%" cy="35%" r="65%">
+          {color === 'orange' && (
+            <>
+              <stop offset="0%" stopColor="#ffedd5" />
+              <stop offset="40%" stopColor="#fb923c" />
+              <stop offset="100%" stopColor="#c2410c" />
+            </>
+          )}
+          {color === 'blue' && (
+            <>
+              <stop offset="0%" stopColor="#e0f2fe" />
+              <stop offset="40%" stopColor="#38bdf8" />
+              <stop offset="100%" stopColor="#0369a1" />
+            </>
+          )}
+          {color === 'pink' && (
+            <>
+              <stop offset="0%" stopColor="#fce7f3" />
+              <stop offset="40%" stopColor="#f472b6" />
+              <stop offset="100%" stopColor="#be185d" />
+            </>
+          )}
+          {color === 'purple' && (
+            <>
+              <stop offset="0%" stopColor="#f3e8ff" />
+              <stop offset="40%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#6b21a8" />
+            </>
+          )}
+        </radialGradient>
+        <radialGradient id={`partnerSphere-${color}`} cx="30%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+          <stop offset="50%" stopColor="#ffffff" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.25" />
+        </radialGradient>
+      </defs>
+      
+      <circle cx="50" cy="50" r="32" stroke={`url(#partner3d-${color})`} strokeWidth="15" strokeLinecap="round" strokeDasharray="160 30" />
+      <circle cx="50" cy="50" r="32" stroke={`url(#partnerSphere-${color})`} strokeWidth="15" strokeLinecap="round" strokeDasharray="160 30" />
+      <circle cx="72" cy="28" r="8" fill={`url(#partner3d-${color})`} />
+      <circle cx="72" cy="28" r="8" fill={`url(#partnerSphere-${color})`} />
+      <circle cx="28" cy="68" r="5" fill={`url(#partner3d-${color})`} />
+    </svg>
+  );
+};
 
 const AVAILABILITY_OPTIONS = [
   'Available for Execution',
@@ -61,6 +118,17 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
     sessionMinutes: 28,
   };
 
+  // Find partner strictly when connection accepted
+  const isConnected = appData.partnerConnection.status === 'accepted' && 
+    !!appData.partnerConnection.pairedUserId && 
+    !!appData.founders[appData.partnerConnection.pairedUserId];
+  const pairedPartner = isConnected ? appData.founders[appData.partnerConnection.pairedUserId] : null;
+
+  // Incoming pending requests directed to this user's invite code
+  const incomingRequests = appData.partnerRequests.filter(
+    (req) => req.status === 'pending' && (req.targetInviteCode === activeUser.inviteCode || !req.targetInviteCode)
+  );
+
   const handleCopyCode = () => {
     navigator.clipboard.writeText(activeUser.inviteCode);
     setCopiedCode(true);
@@ -92,15 +160,153 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
       status: 'pending',
     };
 
-    const updated = {
-      ...appData,
-      partnerRequests: [newReq, ...appData.partnerRequests],
+    // Ensure my profile is stored in founders so recipient knows my details
+    const updatedFounders = {
+      ...appData.founders,
+      [activeUser.id]: activeUser,
     };
 
-    saveAppData(updated);
+    const updated = pushAppNotification(
+      {
+        ...appData,
+        founders: updatedFounders,
+        partnerRequests: [newReq, ...appData.partnerRequests],
+      },
+      {
+        type: 'partner',
+        title: `🤝 New Partner Request from ${activeUser.name}`,
+        message: `${activeUser.name} (${activeUser.role}) sent you a workspace pairing request with code ${activeUser.inviteCode}.`,
+        senderId: activeUser.id,
+        senderName: activeUser.name,
+        senderAvatar: activeUser.avatar,
+        targetUserId: targetCode,
+        actionTab: 'partners',
+        timestamp: 'Just now',
+      }
+    );
+
+    saveAppData(updated, true);
     onUpdateData(updated);
     setPartnerInputCode('');
-    setRequestSentNotice(`Pairing request sent to ${targetCode}! The partner will see a bell icon notification to accept.`);
+    setRequestSentNotice(`Connection request sent to ${targetCode}! When your partner accepts, you will be connected in real-time.`);
+
+    triggerMobileAlert({
+      title: '🤝 Connection Request Sent!',
+      message: `Waiting for ${targetCode} to accept...`,
+      vibratePattern: [150, 100, 150],
+    });
+  };
+
+  // Accept incoming request
+  const handleAcceptRequest = (req: PartnerRequest) => {
+    const updatedRequests = appData.partnerRequests.map((r) =>
+      r.id === req.id ? { ...r, status: 'accepted' as const } : r
+    );
+
+    // Save partner into founders
+    const partnerProfile: UserProfile = appData.founders[req.fromUserId] || {
+      id: req.fromUserId,
+      name: req.fromUserName,
+      avatar: req.fromUserAvatar,
+      role: req.fromUserRole,
+      inviteCode: req.fromInviteCode,
+      email: `${req.fromUserName.toLowerCase().replace(/\s+/g, '_')}@aimsh.agency`,
+      username: req.fromUserName.toLowerCase().replace(/\s+/g, '_'),
+      bio: 'Co-Founder & Workspace Partner',
+      hobbies: [],
+      habitStyles: [],
+      screenTimeHours: '3 - 4 Hours',
+      socials: {},
+      focusAreas: [],
+      primaryObjective: 'Scale agency and collaborate together.',
+    };
+
+    const updatedFounders = {
+      ...appData.founders,
+      [req.fromUserId]: partnerProfile,
+      [activeUser.id]: activeUser,
+    };
+
+    const updatedConnection: PartnerConnection = {
+      partnerInviteCode: req.fromInviteCode,
+      status: 'accepted',
+      pairedUserId: req.fromUserId,
+      pairedAt: new Date().toISOString(),
+    };
+
+    const updatedStatuses = {
+      ...appData.partnerStatuses,
+      [req.fromUserId]: {
+        userId: req.fromUserId,
+        isOnline: true,
+        currentTask: 'Connected to shared agency workspace',
+        availability: 'Available for Execution' as const,
+        lastSeen: 'Active now',
+        sessionMinutes: 10,
+      },
+      [activeUser.id]: myStatus,
+    };
+
+    const baseData: SharedAppData = {
+      ...appData,
+      founders: updatedFounders,
+      partnerRequests: updatedRequests,
+      partnerConnection: updatedConnection,
+      partnerStatuses: updatedStatuses,
+    };
+
+    const updatedData = pushAppNotification(
+      baseData,
+      {
+        type: 'partner',
+        title: '🎉 Partner Linked Successfully!',
+        message: `${activeUser.name} accepted the workspace pairing request. Real-time sync is now live!`,
+        senderId: activeUser.id,
+        senderName: activeUser.name,
+        senderAvatar: activeUser.avatar,
+        targetUserId: req.fromUserId,
+        actionTab: 'partners',
+        timestamp: 'Just now',
+      }
+    );
+
+    saveAppData(updatedData, true);
+    onUpdateData(updatedData);
+
+    triggerMobileAlert({
+      title: '🎉 Partner Connected!',
+      message: `You are now linked with ${req.fromUserName}!`,
+      vibratePattern: [300, 150, 300, 150, 500],
+    });
+  };
+
+  // Decline incoming request
+  const handleDeclineRequest = (reqId: string) => {
+    const updatedRequests = appData.partnerRequests.map((r) =>
+      r.id === reqId ? { ...r, status: 'declined' as const } : r
+    );
+    const updatedData: SharedAppData = {
+      ...appData,
+      partnerRequests: updatedRequests,
+    };
+    saveAppData(updatedData, true);
+    onUpdateData(updatedData);
+  };
+
+  // Disconnect partner
+  const handleDisconnectPartner = () => {
+    if (!confirm('Are you sure you want to disconnect from this partner?')) return;
+    const updatedConnection: PartnerConnection = {
+      partnerInviteCode: '',
+      status: 'none',
+      pairedUserId: '',
+    };
+    const updatedData = {
+      ...appData,
+      partnerConnection: updatedConnection,
+    };
+    saveAppData(updatedData, true);
+    onUpdateData(updatedData);
   };
 
   // Change active user's availability
@@ -142,38 +348,135 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-4xl mx-auto font-sans pb-12">
       
-      {/* Top Header Card */}
-      <div className="app-card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-600" />
-              Agency Partners & Live Co-Founder Roster
-            </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-              Live Presence
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Real-time active status, tasks, availability & instant bell-pairing requests.
-          </p>
+      {/* 1. HERO BANNER: 3D Minimalist Co-Founder Dual Hub */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 text-white p-5 sm:p-6 shadow-xl shadow-indigo-500/20"
+      >
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
+          <Torus3DArt color="pink" size="w-32 h-32" />
         </div>
 
-        <button
-          onClick={onNavigateToChat}
-          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          <span>Open Messenger</span>
-        </button>
-      </div>
+        <div className="relative z-10 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-amber-300" />
+              Co-Founder Real-Time Connection Hub
+            </span>
 
-      {/* Your Seat & Live Status Controller */}
-      <div className="app-card p-5 space-y-3 bg-linear-to-br from-white to-indigo-50/20 border-indigo-100">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full border ${
+              isConnected
+                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-400/30'
+                : 'bg-amber-950/40 text-amber-300 border-amber-400/30'
+            }`}>
+              {isConnected ? '● Partner Linked' : '○ Standalone / Ready to Pair'}
+            </span>
+          </div>
+
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
+              {isConnected && pairedPartner
+                ? `Workspace linked with ${pairedPartner.name}`
+                : 'Connect with your Co-Founder Partner'}
+            </h2>
+            <p className="text-xs text-indigo-100 mt-1 max-w-md">
+              Both partners can see each other's live presence, tasks, skills, and meetings in real-time without delay.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-indigo-200">
+                Your Invite Code: <strong className="font-mono text-white bg-white/20 px-2 py-0.5 rounded-md">{activeUser.inviteCode}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="p-1 px-2 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                {copiedCode ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+
+            <button
+              onClick={onNavigateToChat}
+              className="px-4 py-2 rounded-xl bg-white hover:bg-indigo-50 text-indigo-900 font-extrabold text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Open Messenger</span>
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 2. PENDING INCOMING REQUESTS (Prominent 1-Tap Acceptance Card) */}
+      {incomingRequests.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-black text-slate-800 px-1 flex items-center gap-1.5">
+            <UserPlus className="w-4 h-4 text-emerald-600" />
+            <span>Incoming Connection Requests ({incomingRequests.length})</span>
+          </h3>
+
+          <div className="space-y-2">
+            {incomingRequests.map((req) => (
+              <motion.div
+                key={req.id}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="card-pastel-orange p-4 rounded-3xl relative overflow-hidden shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={req.fromUserAvatar}
+                    alt={req.fromUserName}
+                    className="w-11 h-11 rounded-2xl object-cover border-2 border-white shadow-xs"
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-sm font-black text-slate-900">{req.fromUserName}</h4>
+                      <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-white text-orange-900 font-bold border border-orange-200">
+                        Code: {req.fromInviteCode}
+                      </span>
+                    </div>
+                    <p className="text-xs text-orange-950 font-semibold">{req.fromUserRole} wants to connect with your workspace</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAcceptRequest(req)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Accept & Connect</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeclineRequest(req.id)}
+                    className="px-3 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs border border-slate-200 cursor-pointer"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. YOUR SEAT & LIVE STATUS (3D Pastel Card) */}
+      <div className="card-pastel-blue p-4 sm:p-5 rounded-3xl relative overflow-hidden shadow-sm space-y-3">
+        <div className="absolute right-2 top-2 pointer-events-none">
+          <Torus3DArt color="blue" size="w-18 h-18" />
+        </div>
+
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 max-w-[85%]">
           <div className="flex items-center gap-3">
             <div className="relative">
               <img
@@ -181,30 +484,25 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
                 alt={activeUser.name}
                 className="w-12 h-12 rounded-2xl object-cover ring-2 ring-indigo-500 shadow-sm"
               />
-              {/* Blue checkmark / active indicator for Online */}
-              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center ring-2 ring-white shadow-xs">
-                <Check className="w-3 h-3 stroke-[3]" />
-              </span>
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900">{activeUser.name} (You)</h3>
-                <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+                <h3 className="text-sm font-black text-slate-900">{activeUser.name} (You)</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200">
                   Active
                 </span>
               </div>
-              <p className="text-xs text-slate-500">{activeUser.role}</p>
+              <p className="text-xs text-slate-600 font-medium">{activeUser.role}</p>
             </div>
           </div>
 
-          {/* Quick Availability Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Your Availability:</span>
+            <span className="text-xs font-bold text-slate-600">Availability:</span>
             <select
               value={myStatus.availability}
               onChange={(e) => handleChangeAvailability(e.target.value as any)}
-              className="text-xs px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-800 font-semibold shadow-2xs outline-none focus:border-indigo-500"
+              className="text-xs px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-800 font-bold shadow-2xs outline-none cursor-pointer"
             >
               {AVAILABILITY_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>{opt}</option>
@@ -214,29 +512,29 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
         </div>
 
         {/* Current Working Task Bar */}
-        <div className="p-3 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between gap-2">
+        <div className="relative z-10 p-3 bg-white/90 rounded-2xl border border-sky-200 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs flex-1">
             <Briefcase className="w-4 h-4 text-indigo-600 shrink-0" />
-            <span className="font-semibold text-slate-700 shrink-0">Working on:</span>
+            <span className="font-bold text-slate-700 shrink-0">Working on:</span>
             {isEditingTask ? (
               <form onSubmit={handleSaveCurrentTask} className="flex-1 flex items-center gap-2">
                 <input
                   type="text"
                   value={myCurrentTask}
                   onChange={(e) => setMyCurrentTask(e.target.value)}
-                  placeholder="e.g., Closing client contract, editing high-retention reel..."
-                  className="flex-1 px-2 py-1 text-xs app-input"
+                  placeholder="e.g. Closing client contract, high-ticket reels..."
+                  className="flex-1 px-2.5 py-1 text-xs app-input"
                   autoFocus
                 />
                 <button
                   type="submit"
-                  className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-bold"
+                  className="px-3 py-1 rounded-xl bg-indigo-600 text-white text-[11px] font-bold cursor-pointer"
                 >
                   Save
                 </button>
               </form>
             ) : (
-              <span className="text-slate-600 truncate">{myStatus.currentTask}</span>
+              <span className="text-slate-700 font-medium truncate">{myStatus.currentTask}</span>
             )}
           </div>
 
@@ -246,7 +544,7 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
                 setMyCurrentTask(myStatus.currentTask);
                 setIsEditingTask(true);
               }}
-              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition shrink-0"
+              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer shrink-0"
             >
               Update
             </button>
@@ -254,195 +552,150 @@ export const PartnersHubTab: React.FC<PartnersHubTabProps> = ({
         </div>
       </div>
 
-      {/* Partners List (All Registered Co-Founders) */}
+      {/* 4. BILATERAL ROSTER: YOU & YOUR CONNECTED PARTNER */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-            All Co-Founders & Partners ({foundersList.length})
+          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Co-Founder Workspace Seats ({foundersList.length})</span>
           </h4>
-          <span className="text-[11px] text-slate-400 font-medium">
-            Blue tick = Active · Red tick = Offline
+          <span className="text-[11px] text-slate-500 font-medium">
+            Real-Time Bilateral Sync Active
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {foundersList.map((partner) => {
+          {foundersList.map((partner, idx) => {
             const isMe = partner.id === activeUser.id;
             const status = appData.partnerStatuses[partner.id] || {
               userId: partner.id,
-              isOnline: isMe ? true : false,
-              currentTask: isMe ? myStatus.currentTask : 'Reviewing Q4 strategy & marketing assets',
+              isOnline: true,
+              currentTask: isMe ? myStatus.currentTask : 'Reviewing client deliverables & video edits',
               availability: isMe ? myStatus.availability : 'Available for Execution',
-              lastSeen: isMe ? 'Active now' : 'Seen 14m ago',
-              sessionMinutes: isMe ? 28 : 15,
+              lastSeen: 'Active now',
+              sessionMinutes: 28,
             };
 
-            const isOnline = isMe || status.isOnline;
+            const colorVariant = idx % 2 === 0 ? 'orange' : 'pink';
+            const cardClass = colorVariant === 'orange' ? 'card-pastel-orange' : 'card-pastel-pink';
 
             return (
               <div
                 key={partner.id}
-                className="app-card p-4 space-y-3 relative hover:border-indigo-300 transition"
+                className={`p-4 sm:p-5 rounded-3xl ${cardClass} relative overflow-hidden shadow-sm space-y-3`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="absolute right-2 top-2 pointer-events-none">
+                  <Torus3DArt color={colorVariant} size="w-16 h-16" />
+                </div>
+
+                <div className="relative z-10 flex items-start justify-between gap-3 max-w-[85%]">
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <img
                         src={partner.avatar}
                         alt={partner.name}
-                        className="w-11 h-11 rounded-2xl object-cover border border-slate-200"
+                        className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-xs"
                       />
-                      {/* Status Checkmark Badge: Blue check for active, Red check for offline */}
-                      {isOnline ? (
-                        <span
-                          className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-blue-600 text-white flex items-center justify-center ring-2 ring-white shadow-xs"
-                          title="Active / Online"
-                        >
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        </span>
-                      ) : (
-                        <span
-                          className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-rose-600 text-white flex items-center justify-center ring-2 ring-white shadow-xs"
-                          title="Offline"
-                        >
-                          <XCircle className="w-3 h-3 stroke-[2.5]" />
-                        </span>
-                      )}
+                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                     </div>
 
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <h4 className="text-xs font-bold text-slate-900">{partner.name}</h4>
+                        <h4 className="text-sm font-black text-slate-900">{partner.name}</h4>
                         {isMe && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-bold">
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-white text-slate-800 font-black">
                             YOU
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 font-medium">{partner.role}</p>
+                      <p className="text-[11px] text-slate-600 font-medium">{partner.role}</p>
                     </div>
                   </div>
 
-                  {/* Active / Offline Pill with Color-coded styling */}
-                  {isOnline ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                      Active Now
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
-                      Offline
-                    </span>
-                  )}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Active Now
+                  </span>
                 </div>
 
-                {/* What they are working on */}
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1 text-xs">
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
+                {/* Focus */}
+                <div className="relative z-10 p-2.5 rounded-2xl bg-white/80 border border-slate-200/80 space-y-1 text-xs">
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700">
                     <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
                     <span>Current Focus:</span>
                   </div>
-                  <p className="text-slate-600 pl-4.5 text-[11px] leading-relaxed">
-                    {status.currentTask || 'Focusing on high leverage agency deliverables'}
+                  <p className="text-slate-700 text-[11px] font-medium leading-relaxed">
+                    {status.currentTask}
                   </p>
                 </div>
 
-                {/* Availability & Session Time */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                  <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
+                {/* Footer Actions */}
+                <div className="relative z-10 pt-1 flex items-center justify-between text-xs">
+                  <span className="text-[11px] font-bold text-slate-700 bg-white/80 px-2.5 py-1 rounded-xl border border-slate-200">
                     {status.availability}
                   </span>
 
-                  <span className="flex items-center gap-1 font-mono text-[10px]">
-                    <Clock className="w-3 h-3 text-slate-400" />
-                    {status.lastSeen} ({status.sessionMinutes}m logged)
-                  </span>
+                  {!isMe && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={onNavigateToChat}
+                        className="px-3 py-1 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>Chat</span>
+                      </button>
+                      <button
+                        onClick={handleDisconnectPartner}
+                        className="p-1 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        title="Disconnect Partner"
+                      >
+                        <UserMinus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-
-                {!isMe && (
-                  <div className="pt-1 flex justify-end">
-                    <button
-                      onClick={onNavigateToChat}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" /> Direct Message
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Unique Invite Code & Partner Connection Form with Bell Request System */}
-      <div className="app-card p-5 space-y-4">
-        <div>
-          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-indigo-600" />
-            Connect With Another Partner (Bell Request System)
+      {/* 5. CONNECT PARTNER BY CODE FORM */}
+      <div className="card-pastel-pink p-5 rounded-3xl relative overflow-hidden shadow-sm space-y-4">
+        <div className="absolute right-2 top-2 pointer-events-none">
+          <Torus3DArt color="pink" size="w-20 h-20" />
+        </div>
+
+        <div className="relative z-10 max-w-[85%]">
+          <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-pink-600" />
+            Connect With Another Partner (Invite System)
           </h4>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Each partner has a unique code. When you send a request, a bell notification appears instantly for them to accept.
+          <p className="text-xs text-slate-600 mt-0.5">
+            Enter your co-founder's unique invite code. They will receive an instant incoming request to pair workspaces.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
-          {/* Your Unique Code */}
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Your Unique Invite Code:
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-base font-black text-indigo-600 tracking-wider">
-                {activeUser.inviteCode}
-              </span>
-              <button
-                onClick={handleCopyCode}
-                className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                title="Copy code"
-              >
-                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-400">
-              Share this code with your co-founder so they can link with your workspace.
-            </p>
-          </div>
-
-          {/* Connect Partner Form */}
-          <form onSubmit={handleSendPairRequest} className="p-4 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Connect Partner By Code:
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={partnerInputCode}
-                onChange={(e) => setPartnerInputCode(e.target.value)}
-                placeholder="e.g., AIMSH-9X2Y"
-                className="flex-1 font-mono uppercase text-xs px-3 py-1.5 app-input"
-              />
-              <button
-                type="submit"
-                disabled={!partnerInputCode.trim()}
-                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-1 transition shadow-xs cursor-pointer shrink-0"
-              >
-                <Send className="w-3 h-3" />
-                <span>Send Request</span>
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-400">
-              A connection request will be sent to their notification bell.
-            </p>
-          </form>
-
-        </div>
+        <form onSubmit={handleSendPairRequest} className="relative z-10 flex flex-col sm:flex-row items-center gap-2">
+          <input
+            type="text"
+            value={partnerInputCode}
+            onChange={(e) => setPartnerInputCode(e.target.value)}
+            placeholder="e.g. AIMSH-7B4K"
+            className="w-full sm:w-64 font-mono uppercase text-xs px-3.5 py-2.5 app-input bg-white shadow-2xs font-bold"
+          />
+          <button
+            type="submit"
+            disabled={!partnerInputCode.trim()}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 disabled:opacity-40 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Send Partner Request</span>
+          </button>
+        </form>
 
         {requestSentNotice && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+          <div className="relative z-10 p-3 rounded-2xl bg-white/95 border border-pink-200 text-xs font-bold text-pink-900 flex items-center gap-2 shadow-2xs">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{requestSentNotice}</span>
           </div>

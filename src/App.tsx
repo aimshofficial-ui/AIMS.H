@@ -17,9 +17,13 @@ import { PartnerProfileTab } from './components/Profile/PartnerProfileTab';
 import { ZigzagAnalyticsTab } from './components/Analytics/ZigzagAnalyticsTab';
 import { PartnersHubTab } from './components/Partners/PartnersHubTab';
 import { NotificationBellDrawer } from './components/Notifications/NotificationBellDrawer';
+import { NotificationPermissionBanner } from './components/Notifications/NotificationPermissionBanner';
+import { GlobalSearchModal } from './components/Search/GlobalSearchModal';
 import { OpeningAnimationModal } from './components/Splash/OpeningAnimationModal';
 import { CleanLightOnboarding } from './components/Auth/CleanLightOnboarding';
 import { PWAGuideModal } from './components/PWAGuideModal';
+import { MeetingHub } from './components/Meetings/MeetingHub';
+import { AgencyClientsHub } from './components/Clients/AgencyClientsHub';
 import { SharedAppData } from './types';
 import { loadAppData, saveAppData, subscribeToDataSync } from './utils/storage';
 import { usePWAInstall } from './hooks/usePWAInstall';
@@ -29,6 +33,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BottomTabId>('missions');
   const [isPWAGuideOpen, setIsPWAGuideOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(() => {
     // Show splash animation on session open
     return !sessionStorage.getItem('aimsh_splash_shown');
@@ -82,6 +87,8 @@ export default function App() {
   const pendingRequestsCount = appData.partnerRequests.filter(
     (r) => r.status === 'pending' && (r.targetInviteCode === activeUser.inviteCode || !r.targetInviteCode)
   ).length;
+  const unreadNotificationsCount = (appData.notifications || []).filter((n) => !n.isRead).length;
+  const totalAlertCount = pendingRequestsCount + unreadNotificationsCount;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-indigo-500/20 selection:text-indigo-700">
@@ -96,6 +103,9 @@ export default function App() {
         />
       )}
 
+      {/* Proactive Real-Time Notification Permission Request Banner */}
+      <NotificationPermissionBanner />
+
       {/* Top Header with Brand, Desktop Segmented Navigation, Bell Icon, and Sync Status */}
       <Header
         appData={appData}
@@ -105,10 +115,11 @@ export default function App() {
         onOpenProfile={() => setActiveTab('profile')}
         onOpenPWAGuide={() => setIsPWAGuideOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
+        onOpenSearch={() => setIsSearchOpen(true)}
         onLogOut={handleLogOut}
         missionCount={activeMissionCount}
         messageCount={unreadMessageCount}
-        pendingRequestsCount={pendingRequestsCount}
+        pendingRequestsCount={totalAlertCount}
       />
 
       {/* Main Content Area - Generous, Responsive Layout for Desktop & Mobile */}
@@ -122,7 +133,23 @@ export default function App() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
             {activeTab === 'missions' && (
-              <MissionBoard appData={appData} onUpdateData={setAppData} />
+              <MissionBoard 
+                appData={appData} 
+                onUpdateData={setAppData} 
+                onSelectTab={setActiveTab} 
+              />
+            )}
+
+            {activeTab === 'meetings' && (
+              <MeetingHub appData={appData} onUpdateData={setAppData} />
+            )}
+
+            {activeTab === 'clients' && (
+              <AgencyClientsHub
+                appData={appData}
+                onUpdateData={setAppData}
+                onBackToHome={() => setActiveTab('missions')}
+              />
             )}
 
             {activeTab === 'skills' && (
@@ -184,7 +211,7 @@ export default function App() {
         onClose={() => setIsNotificationsOpen(false)}
         appData={appData}
         onUpdateData={setAppData}
-        onNavigateToChat={() => setActiveTab('chat')}
+        onNavigateToTab={(tab) => setActiveTab(tab as any)}
       />
 
       {/* PWA & Native Packaging Guide Modal */}
@@ -193,6 +220,14 @@ export default function App() {
         onClose={() => setIsPWAGuideOpen(false)}
         onInstallClick={install}
         isInstallable={isInstallable}
+      />
+
+      {/* Global Workspace Search Modal */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        appData={appData}
+        onNavigateToTab={(tab) => setActiveTab(tab)}
       />
 
     </div>

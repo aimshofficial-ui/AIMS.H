@@ -169,9 +169,61 @@ export interface PartnerConnection {
   pairedAt?: string;
 }
 
+export interface AgencyMeeting {
+  id: string;
+  title: string;
+  scheduledTime: string;
+  meetUrl: string;
+  agenda: string;
+  hostId: string;
+  targetPartnerId?: string;
+  status: 'upcoming' | 'accepted' | 'declined' | 'live' | 'completed';
+  declineReason?: string;
+  participants: string[];
+  createdAt: string;
+}
+
+export interface AgencyClient {
+  id: string;
+  name: string;
+  service: string;
+  dealValue: string;
+  status: 'Lead' | 'Negotiation' | 'Active / Retainer' | 'Delivered' | 'Closed';
+  nextAction: string;
+  notes: string;
+  contact?: string;
+  addedBy: string;
+  addedByName: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  type: 'meeting' | 'schedule' | 'message' | 'partner' | 'habit' | 'file' | 'client';
+  title: string;
+  message: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  targetUserId: string;
+  actionUrl?: string;
+  actionTab?: string;
+  timestamp: string;
+  isoTime: string;
+  isRead: boolean;
+}
+
+export interface AgencySettings {
+  agencyName: string;
+  agencyLogoUrl?: string;
+  agencyTagline?: string;
+}
+
 export interface SharedAppData {
   founders: Record<string, UserProfile>;
   activeFounderId: string;
+  agencySettings?: AgencySettings;
   partnerConnection: PartnerConnection;
   partnerRequests: PartnerRequest[];
   partnerStatuses: Record<string, PartnerActivityStatus>;
@@ -184,6 +236,9 @@ export interface SharedAppData {
   brandingTasks: BrandingTask[];
   habits: HabitItem[];
   messages: ChatMessage[];
+  meetings?: AgencyMeeting[];
+  clients?: AgencyClient[];
+  notifications?: AppNotification[];
   sharedScratchpad: string;
   scratchpadLastUpdated: string;
   lastSyncTimestamp: number;

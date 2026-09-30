@@ -3,18 +3,22 @@ import {
   MessageSquare, 
   Send, 
   Smile, 
-  FileText, 
-  Copy, 
-  Check, 
   Trash2, 
-  Download, 
   Users, 
-  Mic,
-  MicOff,
-  Radio
+  Check, 
+  Sparkles,
+  ShieldCheck,
+  CheckCheck,
+  X,
+  AlertTriangle,
+  Copy,
+  CheckSquare,
+  Square
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, SharedAppData } from '../../types';
 import { saveAppData } from '../../utils/storage';
+import { pushAppNotification } from '../../utils/notifications';
 
 interface PartnerChatProps {
   appData: SharedAppData;
@@ -24,11 +28,13 @@ interface PartnerChatProps {
 const EMOJI_REACTIONS = ['🔥', '🚀', '💡', '🎯', '❤️'];
 
 export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData }) => {
-  const [activeView, setActiveView] = useState<'chat' | 'scratchpad'>('chat');
   const [inputText, setInputText] = useState('');
   const [recipientFilter, setRecipientFilter] = useState<string>('all');
-  const [scratchpadText, setScratchpadText] = useState(appData.sharedScratchpad || '');
-  const [copiedScratchpad, setCopiedScratchpad] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [toastNotice, setToastNotice] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -40,377 +46,571 @@ export const PartnerChat: React.FC<PartnerChatProps> = ({ appData, onUpdateData 
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
   };
 
-  const partnerUser = appData.partnerConnection.pairedUserId && appData.founders[appData.partnerConnection.pairedUserId]
+  const isPartnerConnected = appData.partnerConnection.status === 'accepted' && 
+    !!appData.partnerConnection.pairedUserId && 
+    !!appData.founders[appData.partnerConnection.pairedUserId];
+
+  const partnerUser = isPartnerConnected
     ? appData.founders[appData.partnerConnection.pairedUserId]
-    : foundersList.find((f) => f.id !== activeUser.id) || {
-        id: 'user_2',
-        name: 'Co-Founder Partner',
-        role: 'Creative & Strategy',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
-      };
+    : null;
 
-  useEffect(() => {
-    setScratchpadText(appData.sharedScratchpad || '');
-  }, [appData.sharedScratchpad]);
+  const partnerStatus = partnerUser ? (appData.partnerStatuses[partnerUser.id] || {
+    isOnline: true,
+    lastSeen: 'Active now',
+  }) : {
+    isOnline: false,
+    lastSeen: 'Not connected',
+  };
 
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (activeView === 'chat') {
+    if (!isSelectionMode) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [appData.messages, activeView]);
+  }, [appData.messages, isSelectionMode]);
 
+  // Send pure text message with real-time push notification & vibration
   const handleSendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim()) return;
+    const textToSend = inputText.trim();
+    if (!textToSend) return;
 
     const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       senderId: activeUser.id,
       senderName: activeUser.name,
       senderAvatar: activeUser.avatar,
       recipientId: recipientFilter,
-      content: inputText.trim(),
+      content: textToSend,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       reactions: {},
     };
 
-    const updated = {
-      ...appData,
-      messages: [...appData.messages, newMsg],
-    };
-    saveAppData(updated);
-    onUpdateData(updated);
+    const targetPartner = recipientFilter === 'all' ? (partnerUser?.id || 'all') : recipientFilter;
+
+    // Push notification to partner and update app state
+    const updatedWithNotif = pushAppNotification(
+      {
+        ...appData,
+        messages: [...appData.messages, newMsg],
+      },
+      {
+        type: 'message',
+        title: `💬 ${activeUser.name}`,
+        message: textToSend,
+        senderId: activeUser.id,
+        senderName: activeUser.name,
+        senderAvatar: activeUser.avatar,
+        targetUserId: targetPartner,
+        actionTab: 'chat',
+        timestamp: newMsg.timestamp,
+      }
+    );
+
+    saveAppData(updatedWithNotif, true);
+    onUpdateData(updatedWithNotif);
     setInputText('');
   };
 
+  // Keyboard shortcut: Enter to send, Shift+Enter for newline
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Delete a single message
   const handleDeleteMessage = (msgId: string) => {
     const updated = {
       ...appData,
       messages: appData.messages.filter((m) => m.id !== msgId),
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
     onUpdateData(updated);
+    setToastNotice('🗑️ Message deleted');
+    setTimeout(() => setToastNotice(''), 2500);
   };
 
-  const handleClearAllMessages = () => {
+  // Clear all messages
+  const handleConfirmClearAll = () => {
     const updated = {
       ...appData,
       messages: [],
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
     onUpdateData(updated);
+    setIsClearModalOpen(false);
+    setIsSelectionMode(false);
+    setSelectedIds([]);
+    setToastNotice('🗑️ All chat messages cleared');
+    setTimeout(() => setToastNotice(''), 3000);
+  };
+
+  // Delete selected batch
+  const handleDeleteSelected = () => {
+    if (selectedIds.length === 0) return;
+    const updated = {
+      ...appData,
+      messages: appData.messages.filter((m) => !selectedIds.includes(m.id)),
+    };
+    saveAppData(updated, true);
+    onUpdateData(updated);
+    setToastNotice(`🗑️ Deleted ${selectedIds.length} message(s)`);
+    setSelectedIds([]);
+    setIsSelectionMode(false);
+    setTimeout(() => setToastNotice(''), 3000);
+  };
+
+  const handleToggleSelect = (msgId: string) => {
+    setSelectedIds((prev) => 
+      prev.includes(msgId) ? prev.filter((id) => id !== msgId) : [...prev, msgId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === appData.messages.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(appData.messages.map((m) => m.id));
+    }
+  };
+
+  const handleCopyMessage = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setToastNotice('📋 Message text copied!');
+    setTimeout(() => setToastNotice(''), 2000);
   };
 
   const handleToggleReaction = (msgId: string, emoji: string) => {
-    const updatedMsgs = appData.messages.map((m) => {
-      if (m.id !== msgId) return m;
-      const currentList = m.reactions[emoji] || [];
-      const hasReacted = currentList.includes(activeUser.id);
-      const newList = hasReacted
-        ? currentList.filter((uid) => uid !== activeUser.id)
-        : [...currentList, activeUser.id];
-
-      return {
-        ...m,
-        reactions: {
-          ...m.reactions,
-          [emoji]: newList,
-        },
-      };
-    });
-
-    const updated = { ...appData, messages: updatedMsgs };
-    saveAppData(updated);
-    onUpdateData(updated);
-  };
-
-  const handleScratchpadChange = (newVal: string) => {
-    setScratchpadText(newVal);
     const updated = {
       ...appData,
-      sharedScratchpad: newVal,
-      scratchpadLastUpdated: new Date().toISOString(),
+      messages: appData.messages.map((m) => {
+        if (m.id !== msgId) return m;
+        const currentReactions = m.reactions[emoji] || [];
+        const hasReacted = currentReactions.includes(activeUser.id);
+        const nextList = hasReacted
+          ? currentReactions.filter((id) => id !== activeUser.id)
+          : [...currentReactions, activeUser.id];
+        return {
+          ...m,
+          reactions: {
+            ...m.reactions,
+            [emoji]: nextList,
+          },
+        };
+      }),
     };
-    saveAppData(updated);
+    saveAppData(updated, true);
     onUpdateData(updated);
-  };
-
-  const handleCopyScratchpad = () => {
-    navigator.clipboard.writeText(scratchpadText);
-    setCopiedScratchpad(true);
-    setTimeout(() => setCopiedScratchpad(false), 2000);
-  };
-
-  const handleExportMarkdown = () => {
-    const blob = new Blob([scratchpadText], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `aimsh-notes-${new Date().toISOString().split('T')[0]}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setShowEmojiPicker(null);
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 max-w-3xl mx-auto font-sans pb-12">
       
-      {/* Top Header Card */}
-      <div className="app-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-indigo-600" />
-              Partner Messenger & Shared Notes
-            </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Real-Time
-            </span>
+      {/* Toast Notice */}
+      <AnimatePresence>
+        {toastNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="p-2.5 px-4 rounded-2xl bg-slate-900 text-white text-xs font-bold flex items-center justify-between shadow-lg"
+          >
+            <span>{toastNotice}</span>
+            <button onClick={() => setToastNotice('')} className="text-slate-400 hover:text-white font-bold text-xs cursor-pointer ml-2">
+              ✕
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 1. Messenger Container */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[75vh] min-h-[520px]">
+        
+        {/* Chat Top Header */}
+        <div className="px-4 py-3 bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <img
+                src={partnerUser ? partnerUser.avatar : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
+                alt={partnerUser ? partnerUser.name : 'Partner'}
+                className="w-10 h-10 rounded-2xl object-cover border-2 border-white shadow-xs"
+              />
+              <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                partnerStatus.isOnline ? 'bg-emerald-500' : 'bg-slate-400'
+              }`} />
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-slate-900 leading-tight">
+                  {partnerUser ? partnerUser.name : 'Waiting for Partner to Connect'}
+                </h3>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                  partnerStatus.isOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {partnerStatus.isOnline ? 'Active Now' : 'Not Linked Yet'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {partnerUser ? `${partnerUser.role} • Direct Bilateral Chat` : `Share your code ${activeUser.inviteCode} to pair`}
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Private co-founder communication channel with synchronized scratchpad.
-          </p>
+
+          {/* Right Actions: Selection Mode, Clear All History */}
+          <div className="flex items-center gap-1.5">
+            {appData.messages.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSelectionMode(!isSelectionMode);
+                    setSelectedIds([]);
+                  }}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                    isSelectionMode
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs'
+                  }`}
+                  title="Select Multiple Messages to Delete"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{isSelectionMode ? 'Cancel' : 'Select'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsClearModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200/80 transition cursor-pointer flex items-center gap-1 shadow-2xs bg-white"
+                  title="Clear All Chat History / সব মেসেজ ডিলিট করুন"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Clear All</span>
+                </button>
+              </>
+            )}
+            
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-[11px] font-bold text-indigo-700">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>100% Private</span>
+            </div>
+          </div>
         </div>
 
-        {/* View Toggle */}
-        <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200/80 text-xs font-semibold shrink-0">
-          <button
-            onClick={() => setActiveView('chat')}
-            className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-              activeView === 'chat'
-                ? 'bg-white text-indigo-700 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            Chat ({appData.messages.length})
-          </button>
-          <button
-            onClick={() => setActiveView('scratchpad')}
-            className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-              activeView === 'scratchpad'
-                ? 'bg-white text-indigo-700 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Scratchpad
-          </button>
-        </div>
-      </div>
-
-      {activeView === 'chat' ? (
-        /* Messenger View */
-        <div className="app-card flex flex-col h-[560px] overflow-hidden">
-          
-          {/* Chat Partner Header */}
-          <div className="p-3 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="relative">
-                <img
-                  src={partnerUser.avatar}
-                  alt={partnerUser.name}
-                  className="w-8 h-8 rounded-xl object-cover border border-slate-200"
-                />
-                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                  {partnerUser.name}
-                </h4>
-                <p className="text-[10px] text-slate-500">{partnerUser.role}</p>
-              </div>
+        {/* Batch Selection Action Bar (when isSelectionMode is active) */}
+        {isSelectionMode && (
+          <div className="p-2.5 bg-indigo-600 text-white flex items-center justify-between px-4 text-xs font-bold animate-in fade-in shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="underline hover:text-indigo-200 cursor-pointer text-[11px]"
+              >
+                {selectedIds.length === appData.messages.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <span>{selectedIds.length} Selected</span>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono text-slate-400">
-                Synced Mode
-              </span>
-              {appData.messages.length > 0 && (
-                <button
-                  onClick={handleClearAllMessages}
-                  className="p-1 px-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 text-[11px] font-medium transition flex items-center gap-1"
-                  title="Clear all messages"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span className="hidden sm:inline">Clear</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={selectedIds.length === 0}
+                className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                  selectedIds.length > 0
+                    ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-xs active:scale-95'
+                    : 'bg-white/20 text-white/50 cursor-not-allowed'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Selected ({selectedIds.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSelectionMode(false);
+                  setSelectedIds([]);
+                }}
+                className="p-1 text-white/80 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
+        )}
 
-          {/* Messages Stream */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/50">
-            {appData.messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5" />
-                </div>
-                <h4 className="text-sm font-bold text-slate-800">No messages yet</h4>
-                <p className="text-xs text-slate-500 max-w-xs">
-                  Send a quick update, link, or voice note to collaborate with your co-founder.
+        {/* Messages Stream */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#faf9fe]">
+          {appData.messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-xs">
+                <MessageSquare className="w-6 h-6 stroke-2" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-slate-800">Direct Co-Founder Chat</h4>
+                <p className="text-xs text-slate-500 max-w-xs mt-1">
+                  Pure lightweight text messenger. Real-time notifications and vibration alert your partner immediately.
                 </p>
               </div>
-            ) : (
-              appData.messages.map((msg) => {
-                const isMe = msg.senderId === activeUser.id;
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputText("Hey! Ready for today's sprints? 🚀");
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-semibold border border-indigo-100 shadow-2xs transition cursor-pointer"
+                >
+                  "Hey! Ready for today's sprints? 🚀"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputText("Meeting scheduled for 9 PM, see you there! 🤝");
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-semibold border border-indigo-100 shadow-2xs transition cursor-pointer"
+                >
+                  "Meeting scheduled for 9 PM, see you there! 🤝"
+                </button>
+              </div>
+            </div>
+          ) : (
+            appData.messages.map((msg) => {
+              const isMe = msg.senderId === activeUser.id;
+              const isSelected = selectedIds.includes(msg.id);
+              const sender = appData.founders[msg.senderId] || {
+                name: msg.senderName,
+                avatar: msg.senderAvatar,
+              };
 
-                return (
-                  <div
-                    key={msg.id}
-                    className={`group/msg flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`}
-                  >
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 px-1 font-medium">
-                      <span>{isMe ? 'You' : msg.senderName}</span>
-                      <span>•</span>
-                      <span>{msg.timestamp}</span>
-                    </div>
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={`flex items-end gap-2 group ${isMe ? 'justify-end' : 'justify-start'}`}
+                >
+                  {/* Selection Checkbox in Select Mode */}
+                  {isSelectionMode && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSelect(msg.id)}
+                      className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer self-center"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-indigo-600 fill-indigo-50" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-300" />
+                      )}
+                    </button>
+                  )}
 
-                    <div className={`relative flex items-center gap-1.5 max-w-[88%] sm:max-w-[75%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                      <div
-                        className={`p-3 rounded-2xl text-xs break-words ${
-                          isMe
-                            ? 'bg-indigo-600 text-white rounded-tr-xs shadow-xs'
-                            : 'bg-white text-slate-900 border border-slate-200 rounded-tl-xs shadow-2xs'
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  {/* Partner Avatar for incoming messages */}
+                  {!isMe && (
+                    <img
+                      src={sender.avatar}
+                      alt={sender.name}
+                      className="w-7 h-7 rounded-xl object-cover border border-white shadow-2xs mb-1 shrink-0"
+                    />
+                  )}
+
+                  {/* Message Bubble Column */}
+                  <div className={`max-w-[85%] sm:max-w-[70%] space-y-1 ${isMe ? 'items-end' : 'items-start'}`}>
+                    
+                    {/* Sender Name for incoming */}
+                    {!isMe && (
+                      <span className="text-[10px] font-bold text-slate-500 pl-1 block">
+                        {sender.name}
+                      </span>
+                    )}
+
+                    {/* Bubble */}
+                    <div
+                      className={`relative px-4 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs ${
+                        isMe
+                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-br-xs'
+                          : 'bg-white text-slate-900 border border-slate-200/90 rounded-bl-xs'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap break-words font-medium select-text">
+                        {msg.content}
+                      </p>
+
+                      {/* Timestamp & read mark */}
+                      <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono select-none ${
+                        isMe ? 'text-indigo-200' : 'text-slate-400'
+                      }`}>
+                        <span>{msg.timestamp}</span>
+                        {isMe && <CheckCheck className="w-3 h-3 text-indigo-200 inline" />}
                       </div>
 
-                      {/* Delete Single Message Button */}
+                      {/* Displayed Emoji Reactions */}
+                      {msg.reactions && Object.entries(msg.reactions).some(([_, users]) => users.length > 0) && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 pt-1 border-t border-black/10">
+                          {Object.entries(msg.reactions).map(([emoji, users]) => {
+                            if (users.length === 0) return null;
+                            const didIReact = users.includes(activeUser.id);
+                            return (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => handleToggleReaction(msg.id, emoji)}
+                                className={`px-1.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-0.5 transition cursor-pointer ${
+                                  didIReact
+                                    ? 'bg-white text-indigo-900 shadow-2xs border border-indigo-200'
+                                    : 'bg-black/10 text-white'
+                                }`}
+                              >
+                                <span>{emoji}</span>
+                                {users.length > 1 && <span>{users.length}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bubble Action Controls: Quick Emoji Reaction, Copy & 1-Tap Delete Message */}
+                    <div className={`flex items-center gap-1 transition-opacity ${
+                      isMe ? 'justify-end pr-1' : 'justify-start pl-1'
+                    }`}>
+                      {/* Emoji Trigger */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                          title="Add reaction"
+                        >
+                          <Smile className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Floating Quick Reaction Bar */}
+                        {showEmojiPicker === msg.id && (
+                          <div className={`absolute bottom-6 z-20 flex items-center gap-1 p-1 bg-white rounded-full shadow-lg border border-slate-200 animate-in fade-in ${
+                            isMe ? 'right-0' : 'left-0'
+                          }`}>
+                            {EMOJI_REACTIONS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => handleToggleReaction(msg.id, emoji)}
+                                className="w-7 h-7 hover:scale-125 transition flex items-center justify-center text-sm cursor-pointer rounded-full hover:bg-slate-50"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Copy Message Text */}
                       <button
+                        type="button"
+                        onClick={() => handleCopyMessage(msg.content)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                        title="Copy text"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+
+                      {/* 1-Tap Delete Message Button */}
+                      <button
+                        type="button"
                         onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-0 group-hover/msg:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0"
-                        title="Delete message"
-                        aria-label="Delete message"
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                        title="Delete this message (মেসেজটি মুছুন)"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    {/* Reactions Bar */}
-                    <div className="flex items-center gap-1 px-1">
-                      {EMOJI_REACTIONS.map((em) => {
-                        const count = msg.reactions[em]?.length || 0;
-                        const userReacted = msg.reactions[em]?.includes(activeUser.id);
-
-                        return (
-                          <button
-                            key={em}
-                            onClick={() => handleToggleReaction(msg.id, em)}
-                            className={`text-[11px] px-1.5 py-0.5 rounded-full border transition flex items-center gap-0.5 ${
-                              userReacted
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold'
-                                : count > 0
-                                ? 'bg-white border-slate-200 text-slate-600'
-                                : 'opacity-0 hover:opacity-100 bg-white border-slate-200 text-slate-400'
-                            }`}
-                          >
-                            <span>{em}</span>
-                            {count > 0 && <span className="text-[10px] font-mono">{count}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
                   </div>
-                );
-              })
-            )}
-            <div ref={messagesEndRef} />
+                </motion.div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Bar - Pure Text Fast Messenger */}
+        <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex items-end gap-2 shrink-0">
+          <div className="flex-1 relative bg-slate-50 border border-slate-200 rounded-2xl focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition">
+            <textarea
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type message... (Enter to send, Shift+Enter for new line)"
+              rows={1}
+              className="w-full bg-transparent px-3.5 py-2.5 text-xs sm:text-sm font-medium text-slate-800 placeholder:text-slate-400 resize-none outline-none max-h-28"
+            />
           </div>
 
-          {/* Message Input Footer with Partner Selector */}
-          <form onSubmit={handleSendMessage} className="p-2.5 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            
-            {/* Recipient Target Selector */}
-            <div className="shrink-0 flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap hidden sm:inline">To:</span>
-              <select
-                value={recipientFilter}
-                onChange={(e) => setRecipientFilter(e.target.value)}
-                className="text-xs py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 outline-none focus:border-indigo-500"
-              >
-                <option value="all">All Partners</option>
-                {foundersList
-                  .filter((f) => f.id !== activeUser.id)
-                  .map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.role})
-                    </option>
-                  ))}
-              </select>
+          <button
+            type="submit"
+            disabled={!inputText.trim()}
+            className={`p-2.5 sm:px-4 sm:py-2.5 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md ${
+              inputText.trim()
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20 active:scale-95'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <Send className="w-4 h-4 stroke-2" />
+            <span className="hidden sm:inline">Send</span>
+          </button>
+        </form>
+
+      </div>
+
+      {/* Clear All Messages Confirmation Modal */}
+      {isClearModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs font-sans">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl border border-slate-100 text-center"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-xs">
+              <AlertTriangle className="w-6 h-6" />
             </div>
 
-            <div className="flex-1 flex items-center gap-2">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="Type message in any language (বাংলা, English)..."
-                className="flex-1 app-input px-3.5 py-2 text-xs"
-              />
-
-              <button
-                type="submit"
-                disabled={!inputText.trim()}
-                className="p-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition shrink-0 cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Send</span>
-              </button>
-            </div>
-          </form>
-
-        </div>
-      ) : (
-        /* Shared Scratchpad View */
-        <div className="app-card p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-600" />
-                Live Co-Founder Scratchpad
+              <h3 className="text-base font-black text-slate-900">
+                Clear All Messages? (সব মেসেজ মুছবেন?)
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Shared draft pad for video hooks, pitch outlines, and quick meeting notes.
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to delete all {appData.messages.length} messages in this chat? This cannot be undone.
               </p>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2 pt-2">
               <button
-                onClick={handleCopyScratchpad}
-                className="p-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1 transition"
+                type="button"
+                onClick={() => setIsClearModalOpen(false)}
+                className="flex-1 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition"
               >
-                {copiedScratchpad ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedScratchpad ? 'Copied' : 'Copy'}</span>
+                Cancel
               </button>
-
               <button
-                onClick={handleExportMarkdown}
-                className="p-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1 transition"
-                title="Export as Markdown"
+                type="button"
+                onClick={handleConfirmClearAll}
+                className="flex-1 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs cursor-pointer shadow-md transition active:scale-95"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export .md</span>
+                Yes, Delete All
               </button>
             </div>
-          </div>
-
-          <textarea
-            value={scratchpadText}
-            onChange={(e) => handleScratchpadChange(e.target.value)}
-            placeholder="Write shared strategy notes, video hooks, client call bullet points... (auto-saved)"
-            rows={14}
-            className="w-full app-input p-3.5 font-mono text-xs leading-relaxed resize-y"
-          />
-
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-            <span>Real-time sync active across partner devices</span>
-            <span>Last updated: {new Date(appData.scratchpadLastUpdated).toLocaleTimeString()}</span>
-          </div>
+          </motion.div>
         </div>
       )}
 
+      {/* Lightweight Info Banner */}
+      <div className="text-center text-[11px] text-slate-400 font-medium">
+        Pure text messenger • Messages trigger instant bilateral notification & phone vibration
+      </div>
     </div>
   );
 };
